@@ -17,3 +17,13 @@ Each addition must use the smallest necessary host scope, pass a focused verific
 Setup: `.venv/bin/python -m pip install -r requirements.txt`. Verify with `.venv/bin/python -m unittest -q` and `.venv/bin/python smoke_mcp.py`; use `--live` for example.com only. Start via `.venv/bin/python server.py` (stdio).
 
 The Platform tunnel is `learning-analysis`. `tunnel-client` requires a private runtime API key with Tunnels Read + Use, stored only in `.env`; this is separate from MCP OAuth. In ChatGPT choose Connection: Tunnel, Authentication: No Authentication. Keep the client running during discovery and calls.
+
+## Cloud migration (not deployed)
+
+The preceding setup describes the legacy private tunnel only, not a public cloud endpoint. Proposal v3 authorizes validation of Workers Free + Jina's official Reader, not a production connection switch. GCP project `reading-analysis-508317` is on hold because the user does not want to link billing. See [readiness](docs/cloud-readiness.md) and the [proposal](proposals/active/20260911-gce-reader-production.md).
+
+The following Python prototype belongs to the earlier self-hosted route. Its tests remain useful as a contract baseline, not as proof that a Workers adapter exists or has passed validation.
+
+`http_server.py` implements stateless HTTP MCP with owner-restricted RS256 token verification. It is a resource server, not an OAuth login service. It requires `READER_ARCHIVE_MODE=none`, canonical HTTPS `MCP_ISSUER_URL` and `MCP_RESOURCE_URL`, an operator-provided public `MCP_PUBLIC_JWKS_FILE`, and `MCP_OWNER_SUBJECTS`. Public-key rotation requires a new configuration/revision. Never use private signing keys for this file. No issuer or production endpoint is configured yet.
+
+Local tests do not prove cloud readiness: actual browser egress isolation, persistent quotas, container build/cold start, OAuth client compatibility and cost gates remain pending. `/healthz` reports process liveness only. A worker deadline does not prove downstream browser work is stopped. Do not expose this prototype as a production reader.
