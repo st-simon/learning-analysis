@@ -2,13 +2,14 @@
 
 ## Current: v3 Cloudflare validation
 
-Checkpoint: minimal Workers adapter implemented; 15 mock tests and one native-runtime integration test pass. Cloudflare deployment CLI is not authenticated; no new cloud resources or real article calls. Cloud OAuth/CPU/client checks remain pending. See docs/cloudflare-validation.md. Article calls: 0/6.
+Checkpoint: minimal Workers adapter implemented; 15 mock tests and one native-runtime integration test pass. Free KV and validation Worker deployed; health/anonymous/OAuth metadata/server-side consent checks pass. Real token exchange, cloud CPU/client checks and article calls remain pending. See docs/cloudflare-validation.md. Article calls: 0/6.
 
 - [x] User declines GCP billing linkage and approves Cloudflare + official Jina validation.
 - [x] Update same-ID proposal to v3, approved for validation only; no production switch.
 - [x] Confirm Cloudflare Workers Free/$0/current plan in signed-in account dashboard.
 - [ ] Confirm no-payment OAuth/quota storage and Jina privacy/free-use settings.
 - [x] Build minimal private Workers adapter and independent mock tests; preserve Python baseline.
+- [x] Deploy authenticated validation Worker and verify health, anonymous rejection, OAuth metadata and consent redirect.
 - [ ] Run bounded article/first/continuous/overnight checks and report evidence under v3.
 - [ ] Obtain production-switch confirmation after validation; verify two devices and rollback.
 

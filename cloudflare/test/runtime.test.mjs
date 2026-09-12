@@ -31,7 +31,7 @@ test('actual Workers runtime: OAuth, private MCP, quota persistence and no anony
     assert.equal(anonymous.status,401);assert.equal(calls,0);
     const forged=await mf.dispatchFetch(origin+'/mcp',{method:'POST',headers:{...jsonHeaders,Authorization:'Bearer forged'},body:'{}'});
     assert.equal(forged.status,401);assert.equal(calls,0);
-    const foreign=await mf.dispatchFetch(origin+'/mcp',{method:'POST',headers:{...jsonHeaders,Origin:'https://foreign.example'},body:'{}'});
+    const foreign=await mf.dispatchFetch(origin+'/mcp',{method:'POST',headers:{...jsonHeaders,'Sec-Fetch-Site':'cross-site'},body:'{}'});
     assert.equal(foreign.status,403);assert.equal(calls,0);
     const metadata=await mf.dispatchFetch(origin+'/.well-known/oauth-protected-resource');
     assert.equal((await metadata.json()).resource,origin+'/mcp');

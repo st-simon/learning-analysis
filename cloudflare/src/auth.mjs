@@ -11,7 +11,7 @@ const problem=(status=400)=>new Response('Authorization could not be completed.'
 
 export async function authorize(request, env, {fetcher=fetch}={}) {
   const url=new URL(request.url);
-  const flows=env.ARTICLE_QUOTA.get(env.ARTICLE_QUOTA.idFromName('owner'));
+  const flows=env.ARTICLE_QUOTA.get(env.ARTICLE_QUOTA.idFromName(env.AUTH_STATE_ID||'owner'));
   try {
     if (url.pathname==='/authorize' && request.method==='GET') {
       const auth=await env.OAUTH_PROVIDER.parseAuthRequest(request);
@@ -27,7 +27,7 @@ export async function authorize(request, env, {fetcher=fetch}={}) {
         {headers:{...headers,'Content-Type':'text/html; charset=utf-8','Set-Cookie':cookie(binding)}});
     }
     if (url.pathname==='/authorize' && request.method==='POST') {
-      if (request.headers.get('origin')!==env.PUBLIC_ORIGIN) return problem(403);
+      if (request.headers.get('sec-fetch-site')==='cross-site') return problem(403);
       const form=new URLSearchParams(await boundedText(request,32768));
       const binding=bindingOf(request), id=form.get('state');
       if (!binding || !id) return problem();

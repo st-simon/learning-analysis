@@ -1,13 +1,44 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "learning-analysis-validation",
-  "main": "src/index.mjs",
-  "compatibility_date": "2026-09-11",
-  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
-  "workers_dev": false,
-  "preview_urls": false,
-  "observability": {"enabled": false},
-  "kv_namespaces": [{"binding": "OAUTH_KV", "id": "REPLACE_WITH_TEST_NAMESPACE_ID"}],
-  "durable_objects": {"bindings": [{"name": "ARTICLE_QUOTA", "class_name": "ArticleQuota"}]},
-  "migrations": [{"tag": "v1", "new_sqlite_classes": ["ArticleQuota"]}]
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "learning-analysis-validation",
+	"main": "src/index.mjs",
+	"compatibility_date": "2026-09-11",
+	"compatibility_flags": [
+		"nodejs_compat",
+		"global_fetch_strictly_public"
+	],
+	"workers_dev": true,
+	"preview_urls": false,
+	"observability": {
+		"enabled": false
+	},
+	"vars": {
+		"PUBLIC_ORIGIN": "https://learning-analysis-validation.learning-analysis-worker.workers.dev",
+		"OWNER_GITHUB_ID": "253958786",
+		"GITHUB_CLIENT_ID": "Ov23lirZveaO3QC33j25",
+		"AUTH_STATE_ID": "validation-auth-v1"
+	},
+	"kv_namespaces": [
+		{
+			"binding": "OAUTH_KV",
+			"id": "11ad7a6d57a64ec8aca533f38f37fd4f",
+			"remote": true
+		}
+	],
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "ARTICLE_QUOTA",
+				"class_name": "ArticleQuota"
+			}
+		]
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": [
+				"ArticleQuota"
+			]
+		}
+	]
 }

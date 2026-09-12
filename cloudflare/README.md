@@ -15,7 +15,8 @@ Miniflare is explicitly pinned (currently an alpha dependency of the selected Wr
 ## Boundaries
 
 - One tool: `read_url(url)`, stateless HTTP MCP at `/mcp`.
-- Owner-only GitHub identity, explicit browser consent, PKCE S256 and one-time states.
+- Owner-only GitHub identity, explicit browser consent, PKCE S256 and one-time states;
+  explicit browser cross-site submissions are rejected and the consent state is browser-bound.
 - HTTPS exact-host allowlist: example.com, www.iana.org, mp.weixin.qq.com.
 - Fixed Jina POST endpoint, DNT=1, no API key, no automatic retry or provider fallback.
 - UTC daily limit: 10 attempts, including failed upstream reads. SQLite Durable Object
@@ -26,20 +27,24 @@ Miniflare is explicitly pinned (currently an alpha dependency of the selected Wr
 - DNT is a provider request, not a guarantee of zero third-party processing or retention.
   The adapter cannot enforce Jina's internal browser network boundary.
 
-## Account setup needed before private pilot
+## Current deployment and remaining pilot setup
 
-1. Authorize the deployment tool for the intended Cloudflare Free account. Review requested
-   permissions in the browser; do not use a temporary account or select a paid plan.
-2. Create this project's OAuth KV namespace and SQLite Durable Object binding only.
-   Replace the placeholder namespace ID. Record exact resource IDs privately for rollback.
-3. Reserve the private test Worker origin and create a dedicated GitHub OAuth App:
+The validation Worker is deployed at `https://learning-analysis-validation.learning-analysis-worker.workers.dev`.
+Its health check, anonymous rejection, OAuth metadata and server-side consent redirect have
+passed. The live endpoint is not the production plugin connection and has made zero article
+calls.
+
+Before the private pilot:
+
+1. Check the account's Free usage and shared limits; do not add a payment method or upgrade.
+2. A dedicated GitHub OAuth App is already configured for this validation Worker:
    homepage = that HTTPS origin; callback = that origin + `/callback`.
    Login requests `read:user`, not repository or email access. Restrict `OWNER_GITHUB_ID`
    to the owner's verified numeric GitHub ID.
-4. Configure nonsecret `PUBLIC_ORIGIN`, `OWNER_GITHUB_ID`, `GITHUB_CLIENT_ID`.
+3. The Worker has nonsecret `PUBLIC_ORIGIN`, `OWNER_GITHUB_ID`, `GITHUB_CLIENT_ID` configured.
    Store `GITHUB_CLIENT_SECRET` through Workers secret input, never Git or chat.
-5. Only enable the test workers.dev endpoint once authentication/configuration is ready.
-   The checked-in config disables workers.dev and preview URLs and has no credentials.
+4. Only use the workers.dev endpoint for this bounded validation.
+   Preview URLs remain disabled and no credentials are checked in.
    `/healthz` means the process is alive, not that Reader extraction has been verified.
 6. Verify real client authorization and anonymous rejection before any real article call.
    Check Free CPU/KV/DO usage and account-shared limits. Local runtime speed is not proof

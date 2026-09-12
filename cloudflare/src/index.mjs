@@ -21,8 +21,10 @@ export default {
       return new Response('Not configured',{status:503});
     const url=new URL(request.url);
     if (url.origin!==env.PUBLIC_ORIGIN) return new Response('Unexpected host',{status:400});
-    const from=request.headers.get('origin');
-    if (from && from!==env.PUBLIC_ORIGIN) return new Response('Unexpected origin',{status:403});
+    // Browser form submissions may arrive with a rewritten Origin on workers.dev.
+    // Keep the exact-host check above and reject explicit cross-site fetches.
+    if (request.headers.get('sec-fetch-site')==='cross-site')
+      return new Response('Unexpected origin',{status:403});
     if (url.pathname==='/healthz') return Response.json({status:'alive',reader_verified:false});
     if (!provider || cachedOrigin!==env.PUBLIC_ORIGIN) {
       cachedOrigin=env.PUBLIC_ORIGIN;

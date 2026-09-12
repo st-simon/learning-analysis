@@ -21,11 +21,11 @@ async function consent(env) {
 }
 test('consent is bound to browser, same origin and one-time server state',async()=>{
   const {env}=fixture();const {cookie,state}=await consent(env);
-  const post=(cookie,origin)=>new Request(env.PUBLIC_ORIGIN+'/authorize',{method:'POST',headers:{cookie,origin},body:new URLSearchParams({state})});
-  assert.equal((await authorize(post(cookie,'https://evil.example'),env)).status,403);
-  assert.equal((await authorize(post('bad',env.PUBLIC_ORIGIN),env)).status,400);
-  assert.equal((await authorize(post(cookie,env.PUBLIC_ORIGIN),env)).status,302);
-  assert.equal((await authorize(post(cookie,env.PUBLIC_ORIGIN),env)).status,400);
+  const post=(cookie,headers)=>new Request(env.PUBLIC_ORIGIN+'/authorize',{method:'POST',headers,body:new URLSearchParams({state})});
+  assert.equal((await authorize(post(cookie,{cookie,'Sec-Fetch-Site':'cross-site'}),env)).status,403);
+  assert.equal((await authorize(post('bad',{cookie:'bad'}),env)).status,400);
+  assert.equal((await authorize(post(cookie,{cookie}),env)).status,302);
+  assert.equal((await authorize(post(cookie,{cookie}),env)).status,400);
 });
 test('callback requires owner identity and never stores GitHub access token in grant',async()=>{
   for(const userId of [123,999]){
