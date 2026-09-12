@@ -1,7 +1,7 @@
 # 学习和拆解 · 文章读取：Cloudflare 免费入口与 Jina 官方 Reader 验证提案 v3
 
 - ID：20260911-gce-reader-production（沿用原 ID、路径，不重复登记）
-- 状态：approved（用户已批准 Cloudflare 方案验证；本轮先更新提案，真实验证尚未执行）
+- 状态：in_progress（Cloudflare Free/$0/current plan已在账号页确认；最小适配与本地mock/运行时验证完成；云端授权、真实文章验证待执行；文章调用0/6）
 - 日期：2026-09-11；v3 修订：2026-09-12
 - 项目：learning-analysis；分支：codex/gce-reader-implementation（保留历史名称，不表示继续 GCE）
 - 插件：学习和拆解 · 文章读取；dev-6aa2c716a2988191bfee50bf01dbed4e@created-by-me-remote
@@ -13,7 +13,7 @@
 
 v1 的 USD100/月与 GCE 常驻建议已经撤回。v2 改为 Cloud Run 请求计费、缩到零；用户提供项目 reading-analysis-508317，随后确认未关联有效结算账号，并决定当前不关联。Cloud Run 免费额度仍有结算前置条件，因此旧路线停止部署，不关联结算、启用云资源或继续GCP部署。[S6]
 
-用户现已同意开始验证 Cloudflare，要求先更新 proposal。批准的是有界验证方向，不代表批准正式切换插件、付费、接受账户条款或授予广泛权限。本轮仅更新文档与状态。
+用户已同意开始验证 Cloudflare，并在v3更新提交后明确要求开始验证。批准的是有界验证方向，不代表批准正式切换插件、付费、接受账户条款或授予广泛权限。已开始账号及免费依赖检查，见 docs/cloudflare-validation.md；尚无真实文章调用或云变更。
 
 已有 Python HTTP 适配13项测试及 stdio smoke 通过，仅为本地基线，不能证明 Workers、真实 OAuth、公众号提取或完整出站隔离。尚无新云资源和插件连接通过验收。本地独立 Jina 仓库/容器不动，保留所有现有未提交代码。
 
@@ -105,7 +105,7 @@ Browser Run的10分钟/日只属于备选，不限制首选Jina路线。官方�
 
 ## 10. 状态与完成定义
 
-v1撤回 → v2批准后因结算停止 → v3验证方向已批准。当前approved，仅完成提案修订；后续开始验证时in_progress，适配完成后implemented，获批范围验收完成后verified，外部条件阻塞则blocked。正式切换需单独确认，所有后续项关闭才归档。沿用同ID，不掩盖旧决定。
+v1撤回 → v2批准后因结算停止 → v3批准后开始前置验证 → in_progress（Free/$0/current plan已确认；最小适配与本地mock/运行时验证完成）。当前仍未达到implemented/verified：云端授权、真实客户端、Free额度和文章试点尚未完成。外部条件再次不具备时blocked。正式切换需单独确认，所有后续项关闭才归档。沿用同ID，不掩盖旧决定。
 
 ## 11. 来源与工作流
 

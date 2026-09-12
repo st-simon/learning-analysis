@@ -7,3 +7,7 @@ logs/
 runtime/
 __pycache__/
 .DS_Store
+cloudflare/node_modules/
+cloudflare/.wrangler/
+cloudflare/.dev.vars*
+cloudflare/dist/

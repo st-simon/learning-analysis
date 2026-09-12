@@ -2,6 +2,8 @@
 
 ## Current route: proposal v3 approved for validation
 
+Latest checkpoint: signed-in Cloudflare account visibly shows Workers Free/$0/current plan and published free limits. See [validation record](cloudflare-validation.md). No article calls or deployment yet.
+
 User declines GCP billing linkage and approves validating Cloudflare Workers Free + Jina official Reader; this turn updates the proposal first. No Workers deployment, real-article validation or production connection switch has happened. The v3 proposal is authoritative; the GCP compute illustration and deployment gates below are historical v2 evidence, not the current deployment plan.
 
 Next: check Cloudflare Free account access and a no-payment authentication/quota path, then build a minimal private adapter and mock tests. Only after the gates pass, run at most six real article calls under v3's no-retry rules and report extraction, image-reference fidelity and first/continuous/overnight timing. Formal plugin switching requires separate confirmation. The user need not link GCP billing or send secrets.
