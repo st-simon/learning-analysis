@@ -1,7 +1,7 @@
 export const MAX_RESPONSE = 4_000_000;
 export const ALLOWED_HOSTS = new Set(['example.com', 'www.iana.org', 'mp.weixin.qq.com']);
 export class ReadError extends Error {
-  constructor(code) { super(code); this.code = code; }
+  constructor(code, details = {}) { super(code); this.code = code; Object.assign(this, details); }
 }
 
 export function validateUrl(value) {
@@ -39,7 +39,7 @@ export async function boundedText(response, max = MAX_RESPONSE) {
   return new TextDecoder('utf-8', {fatal: true}).decode(bytes);
 }
 
-export async function readArticle(input, {fetcher = fetch, timeoutMs = 45_000} = {}) {
+export async function readArticle(input, {fetcher = fetch, timeoutMs = 45_000, jinaApiKey} = {}) {
   const url = validateUrl(input);
   const controller = new AbortController();
   let timer;
@@ -47,14 +47,20 @@ export async function readArticle(input, {fetcher = fetch, timeoutMs = 45_000} =
     timer = setTimeout(() => { controller.abort(); reject(new ReadError('READ_TIMEOUT')); }, timeoutMs);
   });
   const operation = async () => {
-    // Fixed upstream and headers: no tokens, cookies, proxies or paid model options.
+    // Fixed upstream and headers: no cookies, proxies or paid model options.
+    const headers = {'Content-Type': 'application/json', Accept: 'application/json', DNT: '1'};
+    if (typeof jinaApiKey === 'string' && jinaApiKey.trim()) headers.Authorization = `Bearer ${jinaApiKey.trim()}`;
     const response = await fetcher('https://r.jina.ai/', {
       method: 'POST', redirect: 'manual', signal: controller.signal,
-      headers: {'Content-Type': 'application/json', Accept: 'application/json', DNT: '1'},
+      headers,
       body: JSON.stringify({url, respondWith: 'markdown', assertStatusCode: 200}),
     });
-    if ([401, 403].includes(response.status)) throw new ReadError('ACCESS_RESTRICTED');
-    if (response.status === 429) throw new ReadError('UPSTREAM_RATE_LIMIT');
+    if (response.status === 401) throw new ReadError('UPSTREAM_AUTH');
+    if (response.status === 403) throw new ReadError('ACCESS_RESTRICTED');
+    if (response.status === 429) {
+      const retryAfter = Number(response.headers.get('retry-after'));
+      throw new ReadError('UPSTREAM_RATE_LIMIT', {retryAfter: Number.isFinite(retryAfter) && retryAfter >= 0 ? Math.min(Math.floor(retryAfter), 86_400) : undefined});
+    }
     if (response.status >= 300 && response.status < 400) throw new ReadError('UPSTREAM_REDIRECT');
     if (!response.ok) throw new ReadError('UPSTREAM_ERROR');
     let payload;
@@ -82,7 +88,7 @@ export async function readArticle(input, {fetcher = fetch, timeoutMs = 45_000} =
   finally { clearTimeout(timer); controller.abort(); }
 }
 
-export async function executeRead(input, {quota, fetcher, requestId = crypto.randomUUID(), timeoutMs} = {}) {
+export async function executeRead(input, {quota, fetcher, requestId = crypto.randomUUID(), timeoutMs, jinaApiKey} = {}) {
   try { validateUrl(input); }
   catch { return {status: 'error', error_code: 'INVALID_URL', request_id: requestId}; }
   let lease;
@@ -90,10 +96,12 @@ export async function executeRead(input, {quota, fetcher, requestId = crypto.ran
     lease = await quota.acquire(requestId);
     if (!lease.allowed) return {status: 'error', error_code: lease.code, request_id: requestId,
       message: 'Request not queued or retried. Daily limit resets at 00:00 UTC.'};
-    return {...await readArticle(input, {fetcher, timeoutMs}), request_id: requestId};
+    return {...await readArticle(input, {fetcher, timeoutMs, jinaApiKey}), request_id: requestId};
   } catch (error) {
-    return {status: 'error', error_code: error instanceof ReadError ? error.code : 'QUOTA_UNAVAILABLE',
+    const result = {status: 'error', error_code: error instanceof ReadError ? error.code : 'QUOTA_UNAVAILABLE',
       request_id: requestId, message: 'Article could not be read. No automatic retry.'};
+    if (error instanceof ReadError && Number.isInteger(error.retryAfter)) result.retry_after_seconds = error.retryAfter;
+    return result;
   } finally {
     if (lease?.allowed) {
       // An abandoned lease expires; a release error must not replay an article.

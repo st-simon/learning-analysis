@@ -7,7 +7,7 @@ export {ArticleQuota} from './quota-object.mjs';
 class ReaderAPI extends WorkerEntrypoint {
   async fetch(request) {
     const quota=this.env.ARTICLE_QUOTA.get(this.env.ARTICLE_QUOTA.idFromName('owner'));
-    return mcpResponse(request,{ownerId:this.env.OWNER_GITHUB_ID,props:this.ctx.props,quota});
+    return mcpResponse(request,{ownerId:this.env.OWNER_GITHUB_ID,props:this.ctx.props,quota,jinaApiKey:this.env.JINA_API_KEY});
   }
 }
 let cachedOrigin, provider;

@@ -3,7 +3,9 @@
 Status: validation Worker deployed; server-side consent probe passed. Real client
 authorization and live article verification remain pending.
 Existing Python bridge and installed Jina are unchanged. This adapter uses the official
-anonymous Jina Reader endpoint, not the local Reader. It is not a production connection switch.
+Jina Reader endpoint, not the local Reader. An optional `JINA_API_KEY` Worker Secret avoids
+the most restrictive anonymous pool; it is never accepted from the MCP caller. This is not
+a production connection switch.
 
 ## Reproduce
 
@@ -36,7 +38,7 @@ Do not combine it with automatic retries or an unbounded URL list.
 - Owner-only GitHub identity, explicit browser consent, PKCE S256 and one-time states;
   explicit browser cross-site submissions are rejected and the consent state is browser-bound.
 - HTTPS exact-host allowlist: example.com, www.iana.org, mp.weixin.qq.com.
-- Fixed Jina POST endpoint, DNT=1, no API key, no automatic retry or provider fallback.
+- Fixed Jina POST endpoint, DNT=1, optional server-side API key, no automatic retry or provider fallback.
 - UTC daily limit: 10 attempts, including failed upstream reads. SQLite Durable Object
   serializes admission and stores the counter across restarts; busy rejections do not count.
 - Response maximum 4 MB, upstream deadline 45 seconds. Images remain references; no OCR.
@@ -61,6 +63,10 @@ Before the private pilot:
    to the owner's verified numeric GitHub ID.
 3. The Worker has nonsecret `PUBLIC_ORIGIN`, `OWNER_GITHUB_ID`, `GITHUB_CLIENT_ID` configured.
    Store `GITHUB_CLIENT_SECRET` through Workers secret input, never Git or chat.
+   If Jina's anonymous pool returns 429, confirm a no-payment Jina Reader API key is available,
+   then set it interactively with `npx wrangler secret put JINA_API_KEY`; never put the value in
+   shell history, source files, `.dev.vars`, logs or chat. The key is optional in local tests but
+   required to validate recovery from shared-egress anonymous throttling.
 4. Only use the workers.dev endpoint for this bounded validation.
    Preview URLs remain disabled and no credentials are checked in.
    `/healthz` means the process is alive, not that Reader extraction has been verified.

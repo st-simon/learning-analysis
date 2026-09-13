@@ -3,7 +3,7 @@ import {WebStandardStreamableHTTPServerTransport} from '@modelcontextprotocol/sd
 import {ListToolsRequestSchema, CallToolRequestSchema} from '@modelcontextprotocol/sdk/types.js';
 import {boundedText, executeRead} from './reader.mjs';
 
-export async function mcpResponse(request, {ownerId, props, quota, fetcher}) {
+export async function mcpResponse(request, {ownerId, props, quota, fetcher, jinaApiKey}) {
   if (!ownerId || props?.userId !== ownerId || !props.scopes?.includes('articles:read'))
     return new Response('Forbidden', {status: 403});
   if (request.method !== 'POST') return new Response('Method not allowed', {status:405,headers:{Allow:'POST'}});
@@ -19,7 +19,7 @@ export async function mcpResponse(request, {ownerId, props, quota, fetcher}) {
   server.setRequestHandler(CallToolRequestSchema, async({params})=>{
     if (params.name!=='read_url' || !params.arguments || Object.keys(params.arguments).some(k=>k!=='url'))
       return {isError:true,content:[{type:'text',text:'Invalid tool or arguments'}]};
-    const result=await executeRead(params.arguments.url,{quota,fetcher});
+    const result=await executeRead(params.arguments.url,{quota,fetcher,jinaApiKey});
     return {isError:result.status!=='ok',content:[{type:'text',text:JSON.stringify(result)}],structuredContent:result};
   });
   const transport=new WebStandardStreamableHTTPServerTransport({sessionIdGenerator:undefined,enableJsonResponse:true});

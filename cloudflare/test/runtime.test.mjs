@@ -12,13 +12,13 @@ test('actual Workers runtime: OAuth, private MCP, quota persistence and no anony
     compatibilityDate:'2026-09-11',compatibilityFlags:['nodejs_compat','global_fetch_strictly_public'],
     cf:false,kvNamespaces:['OAUTH_KV'],resourcePersistencePath:root,
     durableObjects:{ARTICLE_QUOTA:{className:'ArticleQuota',useSQLite:true}},
-    bindings:{PUBLIC_ORIGIN:origin,OWNER_GITHUB_ID:'123',GITHUB_CLIENT_ID:'test-client',GITHUB_CLIENT_SECRET:'test-only-secret'},
+    bindings:{PUBLIC_ORIGIN:origin,OWNER_GITHUB_ID:'123',GITHUB_CLIENT_ID:'test-client',GITHUB_CLIENT_SECRET:'test-only-secret',JINA_API_KEY:'jina-test-secret'},
     outboundService:async request=>{
       const url=new URL(request.url);
       if(url.href==='https://github.com/login/oauth/access_token') return new MFResponse(JSON.stringify({access_token:'mock-token'}));
       if(url.href==='https://api.github.com/user') return new MFResponse(JSON.stringify({id:123}));
       if(url.origin==='https://r.jina.ai'){
-        calls++; assert.equal(request.headers.get('dnt'),'1');assert.equal(request.headers.get('authorization'),null);
+        calls++; assert.equal(request.headers.get('dnt'),'1');assert.equal(request.headers.get('authorization'),'Bearer jina-test-secret');
         return new MFResponse(JSON.stringify({code:200,data:{title:'Test article',url:'https://example.com/',content:'Test正文 ![photo](https://example.com/photo.png)'}}));
       }
       throw Error('Unexpected outbound request: '+url.origin);

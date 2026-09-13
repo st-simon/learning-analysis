@@ -23,12 +23,25 @@ test('fixed upstream, DNT, no credentials, and image/table preservation', async 
   assert.equal(result.markdown, article.data.content);
   assert.equal(result.saved_file, null);
 });
+test('optional Jina API key is sent only as an authorization header', async () => {
+  await readArticle(url, {jinaApiKey:'  jina-secret  ', fetcher: async (_, options) => {
+    assert.equal(options.headers.Authorization, 'Bearer jina-secret');
+    return reply(article);
+  }});
+});
 test('HTTP restrictions and redirects never retry', async () => {
   for (const [status, code] of [[403,'ACCESS_RESTRICTED'],[429,'UPSTREAM_RATE_LIMIT'],[302,'UPSTREAM_REDIRECT'],[503,'UPSTREAM_ERROR']]) {
     let calls = 0;
     await assert.rejects(readArticle(url, {fetcher: async () => {calls++; return new Response('', {status});}}), {code});
     assert.equal(calls, 1);
   }
+});
+test('upstream authentication and retry hint are classified without echoing secrets', async () => {
+  await assert.rejects(readArticle(url, {jinaApiKey:'secret-value', fetcher:async()=>new Response('',{status:401})}), {code:'UPSTREAM_AUTH'});
+  const result=await executeRead(url,{jinaApiKey:'secret-value',quota:{async acquire(){return {allowed:true};},async release(){}},
+    fetcher:async()=>new Response('',{status:429,headers:{'Retry-After':'17'}})});
+  assert.deepEqual(result,{status:'error',error_code:'UPSTREAM_RATE_LIMIT',request_id:result.request_id,message:'Article could not be read. No automatic retry.',retry_after_seconds:17});
+  assert.equal(JSON.stringify(result).includes('secret-value'),false);
 });
 test('empty, malformed, unsafe-source and challenge responses fail explicitly', async () => {
   for (const [body, code] of [[{},'INVALID_RESPONSE'], [{data:{...article.data,content:''}},'EMPTY_ARTICLE'],
