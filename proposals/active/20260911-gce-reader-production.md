@@ -1,7 +1,7 @@
 # 学习和拆解 · 文章读取：Cloudflare 免费入口与 Jina 官方 Reader 验证提案 v3
 
 - ID：20260911-gce-reader-production（沿用原 ID、路径，不重复登记）
-- 状态：in_progress（Cloudflare Free/$0/current plan已在账号页确认；最小适配与本地mock/运行时验证完成；云端授权、真实文章验证待执行；文章调用0/6）
+- 状态：in_progress；v4 上游恢复增补：proposed（Cloudflare Free/$0/current plan已确认；OAuth、MCP初始化、工具发现已通过；第2篇文章单次调用返回 `UPSTREAM_RATE_LIMIT`；未重试）
 - 日期：2026-09-11；v3 修订：2026-09-12
 - 项目：learning-analysis；分支：codex/gce-reader-implementation（保留历史名称，不表示继续 GCE）
 - 插件：学习和拆解 · 文章读取；dev-6aa2c716a2988191bfee50bf01dbed4e@created-by-me-remote
@@ -117,3 +117,47 @@ v1撤回 → v2批准后因结算停止 → v3批准后开始前置验证 → in
 - [S6 GCP免费层](https://docs.cloud.google.com/free/docs/free-cloud-features)：停止旧路线的结算依据。
 
 来源于本次对话2026-09-12核对的官方资料，试点前复核。workspace-intake-and-proposal用于审批边界；codebase-design用于保持工具契约、替换内部托管实现。
+
+## 12. v4 增补：Jina 上游限流恢复方案（2026-09-13）
+
+### 背景与证据
+
+第2篇文章的远程验证结果为：OAuth、MCP 初始化、`read_url` 工具发现均通过；`read_url` 实际调用1次，返回 `UPSTREAM_RATE_LIMIT`，正文0字符。Worker 自身的 Durable Object 每日额度尚未耗尽；故障发生在 Worker 调用 Jina 后，不是客户端授权或本地插件连接失败。
+
+Jina Reader 官方说明：匿名流量处于最低信任池、最容易被限流；使用 API key 可获得更高配额，并可启用更高信任的抓取能力。当前 `cloudflare/src/reader.mjs` 使用无认证 POST，因此 Cloudflare 共享出口被纳入匿名限流池是当前首要假设。该假设仍需通过带 key 与不带 key 的单变量验证确认，不能把一次429扩大解释为永久配额耗尽。
+
+### 目标
+
+在不绑定 GCP 结算、不引入付费供应商、不保存正文、不绕过公众号访问限制的前提下，使远程 Worker 能稳定完成少量个人研究文章读取；若 Jina 免费 key 不足或要求付费，则保持明确失败并停止，不自动切换或重试。
+
+### 范围
+
+- Worker 支持可选的 `JINA_API_KEY` 加密 Secret；密钥只通过 Cloudflare Secret 存储注入，不进 Git、日志或聊天。
+- 固定向 `https://r.jina.ai/` 发请求，仅增加 `Authorization: Bearer <secret>`；不开放调用方自定义 header、代理、Cookie 或 Jina 参数。
+- 记录公开且不含密钥/正文的上游分类：`UPSTREAM_RATE_LIMIT`、`UPSTREAM_AUTH`、`UPSTREAM_ACCESS`、`UPSTREAM_ERROR`，必要时保留 `Retry-After` 的非敏感提示。
+- 增加 mock 回归测试：带 key、无 key、401/403/429、Jina body 错误；验证 key 不出现在返回值和日志。
+- 先部署代码，再由用户在 Jina 控制台确认免费资格并自行完成 key 注入；注入后只做一次受控文章验证。
+
+### 非目标
+
+不自动重试、不指数退避、不切换 IP/代理、不新增供应商、不自托管 Jina、不启用 ReaderLM/OCR/搜索、不读取登录或付费墙内容，不正式切换 ChatGPT 插件连接。
+
+### 方案与替代方案
+
+首选是 Jina 官方免费/已有免费额度的 API key。原因是改动最小、保持现有 Reader 解析链路，并直接针对匿名共享出口限流。若 key 仍返回429，先区分账户配额与目标站点/上游策略；只有在另行批准后才评估 Cloudflare Browser Run 或自托管 Reader。不得因单次失败自动扩大基础设施或产生费用。
+
+### Security/Ops
+
+required：新增第三方 Secret、外部 API 认证、供应商配额和费用风险。验收要求：Secret 不进入仓库；匿名调用仍不泄露正文；无 key 时行为可预测；Worker 不回显上游响应中的敏感内容；Jina 免费资格、限额、超额行为在注入前由用户确认。
+
+### 实施与验收门槛
+
+1. 本地先实现可选 Secret header 与错误分类，mock/单元测试通过。
+2. 以不带 key 的现有部署作为基线；部署代码，不调用文章。
+3. 用户在 Jina 控制台确认免费方案后，在 Cloudflare Secret 存储中注入 key；Codex 不要求用户把 key 发到聊天。
+4. 只调用第2篇文章一次；成功则记录标题/正文长度/图片引用质量，429/401/403则停止并记录分类，不重试。
+5. 任一环节出现付费、绑定支付方式、额度不明或需要代理/绕过限制，状态转 `blocked`，不继续扩大验证。
+
+### 完成定义
+
+完成 v4 修复验证的最低条件是：代码和 mock 测试通过、Secret 注入路径安全、一次受控真实调用得到可解释结果。只有连续样本、跨日额度、图片/图表保真和跨设备验证均通过，才可另行讨论正式插件切换。
