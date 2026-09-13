@@ -4,9 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test/auth.test.mjs test/mcp.test.mjs test/quota.test.mjs test/reader.test.mjs",
+    "test": "node --test test/auth.test.mjs test/mcp.test.mjs test/quota.test.mjs test/reader.test.mjs test/client-probe.test.mjs",
     "test:runtime": "npm run check && node --test test/runtime.test.mjs",
     "probe:online": "node test/online-probe.mjs",
+    "probe:client": "node test/client-probe.mjs",
     "verify": "npm test && npm run test:runtime",
     "check": "wrangler deploy --dry-run --outdir dist",
     "dev": "wrangler dev --local"

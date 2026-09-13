@@ -43,7 +43,8 @@ const challenge=Buffer.from(await crypto.subtle.digest('SHA-256',new TextEncoder
 authorize.search=new URLSearchParams({response_type:'code',client_id:client.client_id,
   redirect_uri:'https://example.com/callback',scope:'articles:read',resource:origin+'/mcp',state:'online-probe',
   code_challenge:challenge,code_challenge_method:'S256'}).toString();
-const consent=await fetch(authorize,{redirect:'manual'});
+const consent=await fetch(authorize,{redirect:'manual',signal:AbortSignal.timeout(15000),
+  headers:{'Sec-Fetch-Site':'cross-site','Sec-Fetch-Dest':'document'}});
 const consentText=await consent.text();
 assert.equal(consent.status,200,`authorization consent page (${consentText.slice(0,120)})`);
 const state=consentText.match(/name="state" value="([^"]+)"/)?.[1];
@@ -52,7 +53,8 @@ const flowCookie=cookieValue(consent);
 
 const submit=await request('/authorize',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded',
   Cookie:`__Host-reader-flow=${flowCookie}`},body:new URLSearchParams({state}).toString()});
-assert.equal(submit.status,302,'consent submit must redirect');
+assert.equal(submit.status,200,'consent submit must offer a GET continuation');
+assert.match(await submit.text(),/继续 GitHub 登录/);
 const location=new URL(submit.headers.get('location'));
 assert.equal(location.origin,'https://github.com');
 assert.equal(location.pathname,'/login/oauth/authorize');

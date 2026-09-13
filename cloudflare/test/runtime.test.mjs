@@ -43,14 +43,20 @@ test('actual Workers runtime: OAuth, private MCP, quota persistence and no anony
     const challenge=Buffer.from(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier))).toString('base64url');
     const params=new URLSearchParams({client_id:client.client_id,redirect_uri:'https://client.example/callback',response_type:'code',
       scope:'articles:read',state:'client-state',resource:origin+'/mcp',code_challenge:challenge,code_challenge_method:'S256'});
-    const consent=await mf.dispatchFetch(origin+'/authorize?'+params);
+    const navigation={'Sec-Fetch-Site':'cross-site','Sec-Fetch-Mode':'navigate','Sec-Fetch-Dest':'document'};
+    const crossApi=await mf.dispatchFetch(origin+'/mcp',{headers:navigation});
+    assert.equal(crossApi.status,403);
+    const consent=await mf.dispatchFetch(origin+'/authorize?'+params,{headers:navigation});
     assert.equal(consent.status,200);
     const cookie=consent.headers.get('set-cookie').split(';')[0];
     const state=/name="state" value="([^"]+)"/.exec(await consent.text())[1];
+    const crossPost=await mf.dispatchFetch(origin+'/authorize',{method:'POST',redirect:'manual',headers:{...navigation,cookie},body:new URLSearchParams({state}).toString()});
+    assert.equal(crossPost.status,403);
     const login=await mf.dispatchFetch(origin+'/authorize',{method:'POST',redirect:'manual',headers:{cookie,origin},body:new URLSearchParams({state}).toString()});
-    assert.equal(login.status,302);
+    assert.equal(login.status,200);
+    assert.match(await login.text(),/继续 GitHub 登录/);
     const github=new URL(login.headers.get('location'));
-    const callback=await mf.dispatchFetch(origin+'/callback?'+new URLSearchParams({state:github.searchParams.get('state'),code:'mock-code'}),{redirect:'manual',headers:{cookie}});
+    const callback=await mf.dispatchFetch(origin+'/callback?'+new URLSearchParams({state:github.searchParams.get('state'),code:'mock-code'}),{redirect:'manual',headers:{...navigation,cookie}});
     assert.equal(callback.status,302);
     const returned=new URL(callback.headers.get('location'));
     const token=await mf.dispatchFetch(origin+'/oauth/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},

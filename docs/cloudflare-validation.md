@@ -49,6 +49,35 @@ endpoint, not the production plugin connection.
 
 ## Required next action
 
+Browser consent finding: Chrome console explicitly reported a form-action 'self'
+CSP violation after the consent submission. Replaced the external POST redirect
+with a same-origin 200 continuation page linking to GitHub; kept the CSP unchanged.
+Added fixed, nonsecret consent error categories. 17 unit/mock tests and native
+runtime passed. Deployment c37420e6-1862-4a62-bbed-818b16eb2d52 was verified in
+Chrome Jun: consent succeeds and the GitHub authorization page is reached.
+GitHub final authorization, real token exchange and tool discovery remain pending.
+The older 302 probe results below are historical; successful consent now returns 200.
+
+OAuth navigation regression: the global cross-site check rejected legitimate GET
+requests to /authorize and /callback. A native-runtime test reproduced 403 before
+the fix and passed after exempting only those two GET entry points. Cross-site
+POST and MCP requests remain rejected; callback cookie/state/owner checks remain.
+Validation deployment 4182cbd6-7202-432b-bb73-d907a792b930 passed an online
+cross-site-header consent probe (200 then 302). Real browser callback/token and
+article verification are still pending. The earlier ERR_BLOCKED_BY_CLIENT
+observation has not been attributed to this separate application 403.
+
+The real client harness is now `cd cloudflare && npm run probe:client`. Its
+local mocked regression verifies state rejection, PKCE binding, token exchange,
+initialize/initialized/tools-list ordering, and zero article calls. This is
+local evidence only until a human completes the deployed GitHub flow.
+
+Correction to earlier diagnosis: ERR_BLOCKED_BY_CLIENT was observed during
+automated browser navigation; its precise source is not established. The previous
+probe's example.com callback could not receive a real client authorization result.
+The new client registers a loopback callback instead. No browser protections were
+disabled and no deployed Worker change was required for this harness.
+
 Complete a real client token exchange against the deployed endpoint, then inspect required
 Free usage/features before any article call. Do not add a payment method or upgrade. Real
 Jina extraction and privacy behavior remain open; after client verification, follow the

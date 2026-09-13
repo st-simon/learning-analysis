@@ -1,16 +1,34 @@
 # Private Workers validation adapter
 
-Status: local mock verification only. No cloud deployment or live article verification yet.
+Status: validation Worker deployed; server-side consent probe passed. Real client
+authorization and live article verification remain pending.
 Existing Python bridge and installed Jina are unchanged. This adapter uses the official
 anonymous Jina Reader endpoint, not the local Reader. It is not a production connection switch.
 
 ## Reproduce
 
 Node 24; `npm ci --ignore-scripts`, then `npm run verify`.
-`npm test` runs 15 unit/mock tests. `npm run test:runtime` first bundles with Wrangler
+`npm test` includes unit/mock tests and a loopback-client test. The latter needs
+permission to listen on 127.0.0.1. `npm run test:runtime` first bundles with Wrangler
 without deployment, then runs one native Workers-runtime integration test. All external
 requests in that integration test are intercepted; no article is sent to Jina.
 Miniflare is explicitly pinned (currently an alpha dependency of the selected Wrangler).
+
+`npm run probe:client` starts a five-minute loopback receiver and prints a local
+page to open manually. It registers one temporary client on the deployed Worker
+(a cloud KV write), discovers the authorization endpoint, and uses random PKCE
+and state. After GitHub login, it exchanges the code and checks MCP initialize,
+initialized notification and tools/list. It never calls read_url. Credentials
+stay in memory; output contains only stage/result summaries. The listener closes
+on completion, failure, timeout or process termination. Starting it again creates
+a new registration; do not use repeated starts as polling.
+
+The older `probe:online` stops at the GitHub redirect and uses a placeholder
+callback. Never reuse its registration or fixed verifier for real browser login.
+Both live probes create temporary cloud state; they are not read-only checks.
+Set `PILOT_URL` only for the approved bounded pilot. It performs one real
+`read_url` call after authentication and reports only status and character count.
+Do not combine it with automatic retries or an unbounded URL list.
 
 ## Boundaries
 

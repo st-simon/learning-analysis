@@ -24,7 +24,7 @@ test('consent is bound to browser, same origin and one-time server state',async(
   const post=(cookie,headers)=>new Request(env.PUBLIC_ORIGIN+'/authorize',{method:'POST',headers,body:new URLSearchParams({state})});
   assert.equal((await authorize(post(cookie,{cookie,'Sec-Fetch-Site':'cross-site'}),env)).status,403);
   assert.equal((await authorize(post('bad',{cookie:'bad'}),env)).status,400);
-  assert.equal((await authorize(post(cookie,{cookie}),env)).status,302);
+  assert.equal((await authorize(post(cookie,{cookie}),env)).status,200);
   assert.equal((await authorize(post(cookie,{cookie}),env)).status,400);
 });
 test('callback requires owner identity and never stores GitHub access token in grant',async()=>{
@@ -43,4 +43,25 @@ test('callback requires owner identity and never stores GitHub access token in g
     assert.equal((await authorize(callback,env,{fetcher})).status,400);
     assert.equal(calls,2);
   }
+});
+
+test('consent failure categories are fixed and never echo request secrets',async()=>{
+  const {env}=fixture();const {cookie,state}=await consent(env);
+  const post=(headers,body)=>authorize(new Request(env.PUBLIC_ORIGIN+'/authorize',{
+    method:'POST',headers,body:new URLSearchParams(body)}),env);
+  const missingCookie=await post({}, {state});
+  assert.match(await missingCookie.text(),/CONSENT_COOKIE_MISSING/);
+  const missingState=await post({cookie},{});
+  assert.match(await missingState.text(),/CONSENT_STATE_MISSING/);
+  const unknown=await post({cookie},{state:'private-state-value'});
+  const text=await unknown.text();
+  assert.match(text,/CONSENT_STATE_UNAVAILABLE/);
+  assert.ok(!text.includes('private-state-value'));assert.ok(!text.includes(cookie));
+  const accepted=await post({cookie},{state});
+  assert.equal(accepted.status,200);
+  assert.match(accepted.headers.get('Content-Security-Policy'),/form-action 'self';/);
+  const github=accepted.headers.get('Location');
+  assert.equal(new URL(github).origin,'https://github.com');
+  assert.ok((await accepted.text()).includes(github.replaceAll('&','&amp;')));
+  assert.match(await (await post({cookie},{state})).text(),/CONSENT_STATE_UNAVAILABLE/);
 });

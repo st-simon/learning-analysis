@@ -21,9 +21,11 @@ export default {
       return new Response('Not configured',{status:503});
     const url=new URL(request.url);
     if (url.origin!==env.PUBLIC_ORIGIN) return new Response('Unexpected host',{status:400});
-    // Browser form submissions may arrive with a rewritten Origin on workers.dev.
-    // Keep the exact-host check above and reject explicit cross-site fetches.
-    if (request.headers.get('sec-fetch-site')==='cross-site')
+    // OAuth starts at a client and returns from GitHub via top-level navigation.
+    // GET entry points validate OAuth parameters and browser-bound state in authorize().
+    // Form POSTs and API fetches remain guarded; no CORS access is granted here.
+    const oauthNavigation=request.method==='GET' && ['/authorize','/callback'].includes(url.pathname);
+    if (request.headers.get('sec-fetch-site')==='cross-site' && !oauthNavigation)
       return new Response('Unexpected origin',{status:403});
     if (url.pathname==='/healthz') return Response.json({status:'alive',reader_verified:false});
     if (!provider || cachedOrigin!==env.PUBLIC_ORIGIN) {

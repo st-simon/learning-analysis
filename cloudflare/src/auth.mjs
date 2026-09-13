@@ -6,8 +6,12 @@ const headers={'Cache-Control':'no-store','Referrer-Policy':'no-referrer','X-Con
   'Content-Security-Policy':"default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"};
 const bindingOf=request=>request.headers.get('cookie')?.split(';').map(s=>s.trim()).find(s=>s.startsWith(cookieName+'='))?.slice(cookieName.length+1);
 const cookie=value=>`${cookieName}=${value}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=600`;
-const redirect=(url,binding)=>new Response(null,{status:302,headers:{...headers,Location:url,'Set-Cookie':cookie(binding)}});
-const problem=(status=400)=>new Response('Authorization could not be completed.',{status,headers});
+// An external POST redirect is blocked by form-action 'self' in Chrome.
+// Keep that policy and let the user continue with a regular GET link instead.
+const redirect=(url,binding)=>new Response(`<!doctype html><meta charset="utf-8"><title>继续 GitHub 登录</title><h1>同意已确认</h1><p><a href="${escapeHtml(url)}">继续 GitHub 登录</a></p>`,
+  {status:200,headers:{...headers,'Content-Type':'text/html; charset=utf-8',Location:url,'Set-Cookie':cookie(binding)}});
+// Fixed public categories only: never include request values, upstream bodies or exceptions.
+const problem=(status=400,reason='AUTH_REQUEST_INVALID')=>new Response(`Authorization could not be completed. [${reason}]`,{status,headers});
 
 export async function authorize(request, env, {fetcher=fetch}={}) {
   const url=new URL(request.url);
@@ -27,16 +31,17 @@ export async function authorize(request, env, {fetcher=fetch}={}) {
         {headers:{...headers,'Content-Type':'text/html; charset=utf-8','Set-Cookie':cookie(binding)}});
     }
     if (url.pathname==='/authorize' && request.method==='POST') {
-      if (request.headers.get('sec-fetch-site')==='cross-site') return problem(403);
+      if (request.headers.get('sec-fetch-site')==='cross-site') return problem(403,'CONSENT_CROSS_SITE');
       const form=new URLSearchParams(await boundedText(request,32768));
       const binding=bindingOf(request), id=form.get('state');
-      if (!binding || !id) return problem();
+      if (!binding) return problem(400,'CONSENT_COOKIE_MISSING');
+      if (!id) return problem(400,'CONSENT_STATE_MISSING');
       const flow=await flows.takeFlow(id,binding,'consent');
-      if (!flow) return problem();
+      if (!flow) return problem(400,'CONSENT_STATE_UNAVAILABLE');
       const state=nonce(), verifier=nonce();
       const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier));
       const challenge=btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-      if (!await flows.createFlow(state,binding,'github',{...flow,verifier})) return problem(429);
+      if (!await flows.createFlow(state,binding,'github',{...flow,verifier})) return problem(429,'AUTH_CAPACITY');
       const github=new URL('https://github.com/login/oauth/authorize');
       github.search=new URLSearchParams({client_id:env.GITHUB_CLIENT_ID,redirect_uri:env.PUBLIC_ORIGIN+'/callback',
         scope:'read:user',state,code_challenge:challenge,code_challenge_method:'S256'}).toString();
@@ -68,5 +73,5 @@ export async function authorize(request, env, {fetcher=fetch}={}) {
         'Set-Cookie':`${cookieName}=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0`}});
     }
     return problem(404);
-  } catch { return problem(); }
+  } catch { return problem(400,'AUTH_PROCESSING_FAILED'); }
 }
