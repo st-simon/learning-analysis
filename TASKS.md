@@ -1,6 +1,25 @@
 # Status
 
-## Current: v3 Cloudflare validation
+## Current: hybrid source-gated route
+
+Checkpoint: Proposal policy 1.2 Gate 0 spike was approved on 2026-09-16. The Cloudflare + Jina SaaS fetch route is superseded by real anti-bot evidence; its deployed validation resources remain frozen at zero Gate 0 requests pending explicit cleanup approval.
+
+- [x] Record Jina SaaS rate-limit and WeChat environment-verification evidence.
+- [x] Stop treating Cloudflare + Jina SaaS as the production fetch route.
+- [x] Define the automatic-browser/conditional-Reader architecture and Gate 0.
+- [x] Obtain approval to implement the bounded Gate 0 spike.
+- [ ] Receive 3 current WeChat article URLs from the user.
+- [ ] H0: identify the SSH-forwarded Reader backend without an article call; skip H1 if it remains unknown.
+- [ ] H3a/H3b: verify ChatGPT App/Web fixed-fixture transport through Platform tunnel; do not call Worker.
+- [ ] H2: automatically extract the already rendered DOM for 3 articles, once each, with no content copying.
+- [ ] H3c: return one H2 article through local MCP and Platform tunnel to App/Web.
+- [ ] H1: test 1 direct Reader article only after H0; continue to 2 more only if the first succeeds.
+- [ ] Record structured evidence and stop for a new full-implementation proposal decision.
+- [ ] Obtain separate approval before plugin switching or cloud credential/resource cleanup.
+
+## Superseded: v3/v4 Cloudflare validation
+
+Closed without completing the remaining pilot gates. The list below is retained as historical scope, not current work.
 
 Checkpoint: minimal Workers adapter implemented; 15 mock tests and one native-runtime integration test pass. Free KV and validation Worker deployed; health/anonymous/OAuth metadata/server-side consent checks pass. Real token exchange, cloud CPU/client checks and article calls remain pending. See docs/cloudflare-validation.md. Article calls: 0/6.
 
@@ -26,4 +45,4 @@ Checkpoint: minimal Workers adapter implemented; 15 mock tests and one native-ru
 - [ ] Deploy only after free/security gates pass; verify actual article and cross-device calls.
 - [ ] Switch exact private plugin connection with rollback; no public unauthenticated reader.
 
-Legacy local tunnel remains unchanged. Cloud deployment is not complete.
+Legacy local tunnel remains unchanged. The validation Worker exists but is not the production plugin connection.

@@ -18,12 +18,12 @@ Setup: `.venv/bin/python -m pip install -r requirements.txt`. Verify with `.venv
 
 The Platform tunnel is `learning-analysis`. `tunnel-client` requires a private runtime API key with Tunnels Read + Use, stored only in `.env`; this is separate from MCP OAuth. In ChatGPT choose Connection: Tunnel, Authentication: No Authentication. Keep the client running during discovery and calls.
 
-## Cloud migration (not deployed)
+## Current route: source-gated hybrid
 
-The preceding setup describes the legacy private tunnel only, not a public cloud endpoint. Proposal v3 authorizes validation of Workers Free + Jina's official Reader, not a production connection switch. GCP project `reading-analysis-508317` is on hold because the user does not want to link billing. See [readiness](docs/cloud-readiness.md) and the [proposal](proposals/active/20260911-gce-reader-production.md).
+The preceding setup remains the local baseline. A Cloudflare + Jina SaaS validation Worker was deployed, but a real WeChat article was blocked by upstream environment verification; that route is not the production plugin connection and is frozen at zero Gate 0 requests pending separately approved cleanup. The approved spike direction prioritizes automatic extraction from an already rendered Chrome page through the local MCP and Platform tunnel; users never copy, print or upload article text. Reader direct fetch is only a conditional fast-path probe after its SSH-forwarded backend is identified. See the [project goal](docs/PROJECT_GOAL.md), [architecture](docs/ARCHITECTURE.md), [active proposal](proposals/active/20260914-wechat-reader-hybrid.md), and [validation evidence](docs/cloudflare-validation.md).
 
 The following Python prototype belongs to the earlier self-hosted route. Its tests remain useful as a contract baseline, not as proof that a Workers adapter exists or has passed validation.
 
 `http_server.py` implements stateless HTTP MCP with owner-restricted RS256 token verification. It is a resource server, not an OAuth login service. It requires `READER_ARCHIVE_MODE=none`, canonical HTTPS `MCP_ISSUER_URL` and `MCP_RESOURCE_URL`, an operator-provided public `MCP_PUBLIC_JWKS_FILE`, and `MCP_OWNER_SUBJECTS`. Public-key rotation requires a new configuration/revision. Never use private signing keys for this file. No issuer or production endpoint is configured yet.
 
-Local tests do not prove cloud readiness: actual browser egress isolation, persistent quotas, container build/cold start, OAuth client compatibility and cost gates remain pending. `/healthz` reports process liveness only. A worker deadline does not prove downstream browser work is stopped. Do not expose this prototype as a production reader.
+Local tests do not prove source reliability. The approved Gate 0 is spike-only: identify the Reader backend, verify App/Web transport with a fixed fixture, test automatic DOM extraction on three current articles, then run the conditional Reader probe. `/healthz` reports process liveness only. Do not call or expose the cloud validation Worker during Gate 0.

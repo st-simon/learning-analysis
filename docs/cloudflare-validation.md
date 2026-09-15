@@ -1,6 +1,15 @@
-# Cloudflare v3 validation — updated 2026-09-13
+# Cloudflare v4 validation — updated 2026-09-13
 
-## Result: validation Worker deployed; live client/article verification pending
+## Result: authenticated Jina path deployed; target article remains restricted
+
+2026-09-13: after the user injected a Jina Reader API key as an encrypted
+`JINA_API_KEY` Worker Secret and deployed the change, a new loopback client probe
+completed OAuth, MCP initialization and tool discovery, then made exactly one
+call for the second WeChat article. The result was `ACCESS_RESTRICTED` with zero
+characters, instead of the prior `UPSTREAM_RATE_LIMIT`. This is evidence that the
+request no longer hit the previously observed rate-limit category, but it does not
+independently prove that Jina accepted the key because the adapter intentionally
+maps HTTP 403 to `ACCESS_RESTRICTED`. No automatic retry was performed.
 
 2026-09-13: implemented `cloudflare/` with 15 passing unit/mock tests plus one passing
 native Workers-runtime integration test. The latter verifies the full mocked GitHub/OAuth
@@ -16,9 +25,9 @@ owner-only GitHub OAuth configuration and an isolated short-lived auth-state par
 CPU limits, token exchange completion and MCP client compatibility remain unverified.
 
 Wrangler authorization, the dedicated owner-only GitHub OAuth App, and the encrypted Worker
-secret are configured. A server-side OAuth form check returned 302 to GitHub; browser-driven
-token exchange and MCP client compatibility remain pending. No temporary deployment account,
-payment method, upgrade, production switch, or real Jina call was used.
+secrets are configured. Browser-driven token exchange, MCP compatibility and one real Jina
+call are now complete for the v4 probe. No payment method, upgrade, production switch or
+local Reader change was made.
 
 ## Historical account checkpoint (2026-09-12)
 
@@ -38,16 +47,16 @@ endpoint, not the production plugin connection.
 
 ## Test ledger
 
-- Real article calls: 0 / 6 authorized for the initial pilot.
+- Real article calls: 3 total across the validation history; the v4 post-key recheck consumed 1 call and returned `ACCESS_RESTRICTED`.
 - Workers mocks: 15 unit tests plus 1 native-runtime integration test passed. Health check,
   anonymous MCP 401, OAuth metadata and server-side OAuth consent 302 passed online. Cloud
   CPU, token exchange and real MCP client compatibility remain unverified.
 - Actual Cloudflare account/plan: Free/$0/current plan confirmed in the dashboard; remaining usage and account-wide consumption not inspected.
-- Jina privacy settings and live extraction: pending; no article transmitted.
+- Jina privacy settings and live extraction: live call attempted; target article returned `ACCESS_RESTRICTED`, no body extracted.
 - Existing Python baseline: prior 13 tests and stdio smoke, not rerun or counted as Workers validation.
 - Production plugin connection and local Jina: unchanged.
 
-## Required next action
+## Historical unresolved items
 
 Browser consent finding: Chrome console explicitly reported a form-action 'self'
 CSP violation after the consent submission. Replaced the external POST redirect
@@ -78,8 +87,8 @@ probe's example.com callback could not receive a real client authorization resul
 The new client registers a loopback callback instead. No browser protections were
 disabled and no deployed Worker change was required for this harness.
 
-Complete a real client token exchange against the deployed endpoint, then inspect required
-Free usage/features before any article call. Do not add a payment method or upgrade. Real
-Jina extraction and privacy behavior remain open; after client verification, follow the
-proposal's maximum six-call article pilot. Do not retry article access or switch providers
-to work around site restrictions.
+Do not retry this article or switch providers to work around the restriction. The active Gate 0
+does not continue this diagnostic path: it requires zero requests to the Worker, including
+health, OAuth, MCP and article endpoints. Any future inspection of Jina account/key status,
+Worker calls, payment change, formal plugin switch or cloud-resource cleanup requires a
+separate explicit approval.

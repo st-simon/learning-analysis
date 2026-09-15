@@ -2,7 +2,7 @@
 .env
 .env.*
 !.env.example
-archive/
+/archive/
 logs/
 runtime/
 __pycache__/

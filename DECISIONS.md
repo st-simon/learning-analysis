@@ -3,3 +3,7 @@
 - FastMCP stdio avoids another HTTP listener; tunnel-client forwards to the local process.
 - Narrow exact host allowlist, public DNS check, 4 MB response cap, no automatic retries, private content-addressed archive.
 - The host allowlist is a staged product-security policy, not a claim about all technically readable sites. Add domains only when there is a concrete need; evaluate each domain independently for security, privacy, reliability, extraction quality, and operational cost; allow the smallest necessary scope; and verify it before inclusion.
+- 2026-09-14: source accessibility is Gate 0. Cloudflare + Jina SaaS is superseded as the main WeChat fetch route after a real article returned environment verification despite successful OAuth/MCP and a configured Jina key.
+- 2026-09-16: Gate 0 prioritizes automatic extraction from an already rendered Chrome DOM through local MCP and Platform tunnel. Manual copy, paste, print or upload of article content is not an accepted fallback. Browser credentials, cookies, proxy controls and provider selection stay outside the public tool interface.
+- 2026-09-16: Reader direct fetch is an optional fast-path probe, not an L3 blocker. First identify the SSH-forwarded backend without an article call; test one article and expand to two more only if the first succeeds.
+- 2026-09-16: H3 uses Platform tunnel only. The existing Cloudflare Worker is frozen at zero Gate 0 requests as validation evidence. Disabling it or revoking GitHub/Jina credentials requires a separate explicit operation.

@@ -1,7 +1,7 @@
 # 学习和拆解 · 文章读取：Cloudflare 免费入口与 Jina 官方 Reader 验证提案 v3
 
 - ID：20260911-gce-reader-production（沿用原 ID、路径，不重复登记）
-- 状态：in_progress；v4 上游恢复增补：proposed（Cloudflare Free/$0/current plan已确认；OAuth、MCP初始化、工具发现已通过；第2篇文章单次调用返回 `UPSTREAM_RATE_LIMIT`；未重试）
+- 状态：superseded（2026-09-14；真实验证证明测试公众号被 Jina/微信环境验证阻断，主路线由 `20260914-wechat-reader-hybrid` 取代；已部署资源尚未停用）
 - 日期：2026-09-11；v3 修订：2026-09-12
 - 项目：learning-analysis；分支：codex/gce-reader-implementation（保留历史名称，不表示继续 GCE）
 - 插件：学习和拆解 · 文章读取；dev-6aa2c716a2988191bfee50bf01dbed4e@created-by-me-remote
@@ -105,7 +105,7 @@ Browser Run的10分钟/日只属于备选，不限制首选Jina路线。官方�
 
 ## 10. 状态与完成定义
 
-v1撤回 → v2批准后因结算停止 → v3批准后开始前置验证 → in_progress（Free/$0/current plan已确认；最小适配与本地mock/运行时验证完成）。当前仍未达到implemented/verified：云端授权、真实客户端、Free额度和文章试点尚未完成。外部条件再次不具备时blocked。正式切换需单独确认，所有后续项关闭才归档。沿用同ID，不掩盖旧决定。
+v1撤回 → v2批准后因结算停止 → v3/v4完成有限Cloudflare、OAuth、MCP和真实文章验证 → superseded。真实文章证明Jina公共出口被微信环境验证阻断，因此该路线未达到生产可用，也不再继续文章试点。已部署验证资源保留，等待单独批准停用和撤销凭据；新路线见 `20260914-wechat-reader-hybrid`。
 
 ## 11. 来源与工作流
 
