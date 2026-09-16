@@ -5,18 +5,18 @@
 - Impact level: high
 - Impact triggers: architecture, trust-boundary, external-service, auth-secrets, deployment-infrastructure, sensitive-data, migration-replacement, route-invalidating-uncertainty
 - Proposal readiness: required
-- Status: approved
+- Status: verified
 - Approval scope: spike-only
-- Core gate: pending
+- Core gate: passed
 - Cost gate: not-applicable
 - Contradiction gate: clear
 - Outcome confirmation: confirmed
 - Confirmation source: 用户在 2026-09-15 明确三层产品需求及“不得手动复制、打印正文”硬约束，并在 2026-09-16 批准本次 Proposal 修订
-- Assumption freshness gate: recheck-required
-- External evidence gate: pending
+- Assumption freshness gate: current-at-close
+- External evidence gate: sufficient-for-spike-conclusion
 - Rollback gate: ready
 - Implementation verification: stage-gated
-- 授权说明：用户于 2026-09-16 批准执行本文限定的 Gate 0 spike；未批准 full implementation、部署、正式插件切换或外部资源处置
+- 授权说明：用户于 2026-09-16 批准并完成本文限定的 Gate 0 spike；未批准 full implementation、部署、正式插件切换或外部资源处置
 - 更新日期：2026-09-16
 - 项目：learning-analysis
 - 分支：codex/gce-reader-implementation（历史分支名；进入实现前另行决定是否迁移）
@@ -85,7 +85,7 @@
 |---|---|---|---|
 | 用户 Chrome 能正常打开当前公开公众号文章 | L1–L3 | 已验证至少一篇；尚不能外推到不同文章类型 | `met` |
 | 现有 Reader 转发入口存在 | L1–L3 候选路线 | `127.0.0.1:17831` 由 SSH 监听，只证明本机转发入口存在，不证明后端位于本机或使用家庭网络出口 | `met` |
-| Reader 后端位置、版本、抓取引擎和出口可被确认 | H1 解释前提 | 当前尚未确认 SSH 终点及其通过直接 HTTP 还是浏览器引擎访问；必须先做不读取文章的 H0 | `unverified` |
+| Reader 后端位置、版本和抓取引擎可被确认 | H1 解释前提 | H0 已确认本机 Colima OSS Reader、固定镜像摘要、源码修订和 Puppeteer 依赖；外部出口地址未主动探测，不作为结论 | `met` |
 | Reader 后端当前健康并能稳定取得公众号正文 | L1–L3 候选路线 | 只有一个历史成功样本；若为假，淘汰“Reader 直接读取”主通道 | `unverified` |
 | 正常浏览器会话中的页面可被自动提取为完整文档 | L1–L3 浏览器路线 | 浏览器可打开不等于 DOM 可稳定提取；若为假，浏览器自动提取路线停止 | `unverified` |
 | 自动提取无需读取或传输认证材料 | L1–L3 | 必须通过权限检查和运行时证据确认；若为假，该实现不可接受 | `unverified` |
@@ -177,11 +177,11 @@
 
 | ID | Claim | Consequence if false | Evidence state | Volatility | Verified at | Recheck by / trigger | Cheapest falsification probe | Stop condition | Affected route |
 |---|---|---|---|---|---|---|---|---|---|
-| H0 | 当前 SSH 转发的 Reader 后端身份和访问方式可被确认 | 无法判断 H1 是否与 Jina SaaS 重复，也不能把结果归因于本地网络 | `unverified` | volatile | not-run | Gate 0 开始前或 SSH 转发配置变化时 | 不读取文章，只检查已批准的本地配置、进程边界、健康信息和版本证据 | 无法确认时把后端记为 unknown，跳过 H1 | A |
-| H2 | 正常 Chrome 页面可在不复制正文的情况下自动提取完整文档 | B/C 不成立 | `unverified` | volatile | not-run | 微信页面结构、Chrome版本或提取机制变化时 | 仅在 Mac 上制作最小、可丢弃的自动 DOM 提取 spike，对同3篇文章各执行一次 | 需要 Cookie 导出、正文复制、越权权限或任一篇无法完整提取 | B、C、L3 |
-| H3a | ChatGPT App 能通过 Platform tunnel 调用本地 MCP | App 端 L3 不成立 | `unverified` | volatile | not-run | ChatGPT App、tunnel客户端或连接配置变化时 | 只用固定无敏感测试结果做一次 App 端到端调用，不接触 Reader 或 Worker | 必须手工搬运内容或无法连接 | App、L3 |
-| H3b | ChatGPT Web 能通过同一 Platform tunnel 调用本地 MCP | Web 端 L3 不成立 | `unverified` | volatile | not-run | ChatGPT Web、tunnel能力或连接配置变化时 | 只用固定无敏感测试结果做一次 Web 端到端调用，不接触 Reader 或 Worker | 必须手工搬运内容或无法连接；不得启用 Worker 补洞 | Web、L3 |
-| H3c | H2 的真实文章结果能经本地 MCP 和 Platform tunnel 返回 App/Web | L3 的真实工作流不成立 | `unverified` | volatile | not-run | H2、MCP结果契约或tunnel配置变化时 | H2 通过后，选1篇文章分别做一次 App 和 Web 端到端调用 | 任一客户端不能取得正文或发生未批准持久化 | B、C、L3 |
+| H0 | 当前 SSH 转发的 Reader 后端身份和访问方式可被确认 | 无法判断 H1 是否与 Jina SaaS 重复，也不能把结果归因于本地网络 | `verified` | volatile | 2026-09-16 | Colima、容器ID、镜像摘要、端口映射或启动命令变化时 | 不读取文章，只检查已批准的本地配置、进程边界、健康信息和版本证据 | 无法确认时把后端记为 unknown，跳过 H1 | A |
+| H2 | 正常 Chrome 页面可在不复制正文的情况下自动提取完整文档 | B/C 不成立 | `verified` | volatile | 2026-09-16 | 微信页面结构、Chrome版本或提取机制变化时 | 仅在 Mac 上制作最小、可丢弃的自动 DOM 提取 spike，对同3篇文章各执行一次 | 需要 Cookie 导出、正文复制、越权权限或任一篇无法完整提取 | B、C、L3 |
+| H3a | ChatGPT App 能通过 Platform tunnel 调用本地 MCP | App 端 L3 不成立 | `verified` | volatile | 2026-09-16 | ChatGPT App、tunnel-client或连接配置变化时 | 只用固定无敏感测试结果做一次 App 端到端调用，不接触 Reader 或 Worker | 必须手工搬运内容或无法连接 | App、L3 |
+| H3b | ChatGPT Web 能通过同一 Platform tunnel 调用本地 MCP | Web 端 L3 不成立 | `verified` | volatile | 2026-09-16 | ChatGPT Web、tunnel-client、tunnel能力或连接配置变化时 | 只用固定无敏感测试结果做一次 Web 端到端调用，不接触 Reader 或 Worker | 必须手工搬运内容或无法连接；不得启用 Worker 补洞 | Web、L3 |
+| H3c | H2 的真实文章结果能经本地 MCP 和 Platform tunnel 返回 App/Web | L3 的真实工作流不成立 | `verified` | volatile | 2026-09-16 | H2、MCP结果契约或tunnel配置变化时 | H2 通过后，选1篇文章分别做一次 App 和 Web 端到端调用 | 任一客户端不能取得正文或发生未批准持久化 | B、C、L3 |
 | H1 | Reader 直接读取可作为零浏览器动作的快速通道 | A 不能成为主通道，但不阻断 B 达到 L3 | `unverified` | volatile | not-run | Reader版本、后端、出口或微信策略变化时 | H0 可解释后只测试1篇；仅首篇成功时才对其余2篇各调用一次 | 首篇出现 CAPTCHA、环境异常、空文或明显截断即停止，不重复 | A、C |
 | H4 | 同一套核心可在 Windows 上达到 Mac 结果 | L2/L1 暂不成立 | `unverified` | volatile | not-run | 进入L2或Windows/浏览器版本变化时 | Gate 0核心通过后，在一台用户PC上做一次干净安装和3篇样本复验 | 需要重写核心或引入未批准付费/高权限组件 | L2、L1 |
 | H5 | 外部用户可独立、安全安装和授权 | L1 不成立 | `unverified` | volatile | not-run | 进入L1或安装、授权、分发方式变化时 | L2通过后，由2名试用者按文档完成干净安装、读取和卸载 | 需要维护者Secret、远程人工配置或正文搬运 | L1 |
@@ -192,12 +192,12 @@
 
 | Probe ID | Assumption ID | Environment | Expected falsifier | Observed result | Evidence path | Decision |
 |---|---|---|---|---|---|---|
-| P0 | H0 | 当前 Mac 与现有 SSH 转发，只读检查 | 无法确认后端位置、版本、抓取引擎或出口 | not-run | `docs/gate0-evidence.md#p0` | `not-run` |
-| P2 | H2 | 当前 Mac、正常 Chrome、3篇用户提供文章 | 需要正文搬运、认证材料、越权权限，或任一篇提取不完整 | not-run | `docs/gate0-evidence.md#p2` | `not-run` |
-| P3A | H3a | ChatGPT App、Platform tunnel、本地 MCP、固定无敏感结果 | 无法调用或需要人工搬运结果 | not-run | `docs/gate0-evidence.md#p3a` | `not-run` |
-| P3B | H3b | ChatGPT Web、同一 Platform tunnel、本地 MCP、固定无敏感结果 | 无法调用或需要人工搬运结果 | not-run | `docs/gate0-evidence.md#p3b` | `not-run` |
-| P3C | H3c | H2成功文章、本地 MCP、Platform tunnel、App/Web | 任一客户端不能取得文章结果或发生未批准持久化 | not-run | `docs/gate0-evidence.md#p3c` | `not-run` |
-| P1 | H1 | H0可解释的Reader后端、最多3篇文章 | 首篇出现反爬页、空文或明显截断 | not-run | `docs/gate0-evidence.md#p1` | `not-run` |
+| P0 | H0 | 当前 Mac、Colima 与现有 SSH 转发，只读检查 | 无法确认后端位置、镜像版本、抓取入口或浏览器依赖 | 确认为本机 Colima 中的 Jina OSS Reader；镜像摘要、源码修订、端口、命令和 Puppeteer依赖已记录，外部出口未探测 | `docs/gate0-evidence.md#p0` | `passed` |
+| P2 | H2 | 当前 Mac、正常 Chrome、3篇用户提供文章 | 需要正文搬运、认证材料、越权权限，或任一篇提取不完整 | 3/3 真实文章自动提取成功；正文、图片引用和本地 MCP 结果已核验；无正文搬运或持久化 | `docs/gate0-evidence.md#p2-preflight` | `passed` |
+| P3A | H3a | ChatGPT App、Platform tunnel、本地 MCP、固定无敏感结果 | 无法调用或需要人工搬运结果 | 返回固定探针，明确 `network_used=false`、`persistent_write=false` | `docs/gate0-evidence.md#p3a` | `passed` |
+| P3B | H3b | ChatGPT Web、同一 Platform tunnel、本地 MCP、固定无敏感结果 | 无法调用或需要人工搬运结果 | 返回固定探针，明确 `network_used=false`、`persistent_write=false` | `docs/gate0-evidence.md#p3b` | `passed` |
+| P3C | H3c | H2成功文章、本地 MCP、Platform tunnel、App/Web | 任一客户端不能取得文章结果或发生未批准持久化 | ChatGPT App/Web 均返回22,084字符并与P2一致；无网络抓取或持久化 | `docs/gate0-evidence.md#p3c-real-article-transport` | `passed` |
+| P1 | H1 | H0可解释的Reader后端、最多3篇文章 | 首篇出现反爬页、空文或明显截断 | 主机DNS安全检查因非公网合成地址返回UNSAFE_DESTINATION；未到达Reader，按一次上限停止 | `docs/gate0-evidence.md#p1` | `inconclusive` |
 | P4 | H4 | 用户PC，进入L2后执行 | 无法达到Mac结果或需要未批准高权限/付费组件 | deferred | `docs/l2-evidence.md#p4` | `not-run` |
 | P5 | H5 | 两名外部试用者，进入L1后执行 | 需要维护者Secret、远程人工配置或正文搬运 | deferred | `docs/l1-evidence.md#p5` | `not-run` |
 
@@ -207,8 +207,8 @@
 
 | Claim ID | Claim | Volatility | Authoritative source | Verified at | Recheck by / trigger |
 |---|---|---|---|---|---|
-| X1 | ChatGPT App 当前可使用既有 Platform tunnel 调用本地 MCP | volatile | pending；需核对当前官方说明并以 P3A 实测为准 | not-run | P3A执行前 |
-| X2 | ChatGPT Web 当前可通过同一 Platform tunnel 调用本地 MCP | volatile | pending；需核对当前官方说明并以 P3B 实测为准 | not-run | P3B执行前 |
+| X1 | ChatGPT App 当前可使用既有 Platform tunnel 调用本地 MCP | volatile | OpenAI 官方 `openai/tunnel-client` onboarding/configuration；P3A 实测 | 2026-09-16 | ChatGPT App、tunnel-client 或 tunnel 配置变化时 |
+| X2 | ChatGPT Web 当前可通过同一 Platform tunnel 调用本地 MCP | volatile | OpenAI 官方 `openai/tunnel-client` onboarding/configuration；P3B 实测 | 2026-09-16 | ChatGPT Web、tunnel-client 或 tunnel 配置变化时 |
 | X3 | 当前 tunnel 认证和分发方式可支持未来L2/L1 | volatile | pending；本次 Gate 0 不采用该结论 | not-run | 进入L2或L1提案前 |
 
 ## Spike Limits
@@ -316,7 +316,7 @@ ChatGPT → Cloudflare Worker → r.jina.ai
 ## 所有权与受影响路径
 
 - 产品目标与架构：`docs/PROJECT_GOAL.md`、`docs/ARCHITECTURE.md`；批准 Gate 0 前需同步移除人工复制路线。
-- 活跃提案：`proposals/active/20260914-wechat-reader-hybrid.md`。
+- 本提案归档路径：`proposals/archive/20260914-wechat-reader-hybrid.md`；后续活跃提案为 `proposals/active/20260916-wechat-reader-l3-readiness.md`。
 - Gate 0 证据：`docs/` 下独立、可提交的脱敏矩阵；正文与 Secret 不进入 Git。
 - 本地读取候选：`reader.py`、`server.py` 及对应测试；仅在获批范围内修改。
 - 浏览器自动提取：当前尚无正式路径；spike 获批后使用隔离的实验路径，不直接形成生产扩展。
@@ -394,7 +394,7 @@ Mock 只能证明契约和错误处理，不能证明公众号来源可用。真
 
 ## 状态迁移
 
-当前为 `approved (spike-only)`；开始有界实验后进入 `in_progress`；实验结束后必须停止并更新证据状态：
+本提案已按 `spike-only` 范围完成并转为 `verified`：
 
 - H2 与 H3a–H3c 支持自动浏览器路线：保持提案记录；根据 H1 是否成功决定 B 或 C，再另行提交 `full-implementation` 修订，等待新批准；
 - 承重假设被推翻且无其他合规自动路线：转 `blocked`；

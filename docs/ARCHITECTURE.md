@@ -1,6 +1,6 @@
 # Learning Analysis：混合读取架构
 
-更新日期：2026-09-16；状态：Gate 0 spike-only 已批准，尚未批准 full implementation、部署或正式切换。
+更新日期：2026-09-16；状态：Gate 0 已验证；L3 正式化就绪 proposal 待审批，尚未批准 full implementation、部署或正式切换。
 
 ## 产品优先级
 
@@ -8,7 +8,7 @@
 
 ## 当前设计压力
 
-`read_url` 的调用方需要的是可信文章文档，不应知道底层使用本地 Jina、浏览器 DOM 或云端供应商。当前实现把“来源通道”“网络阶段”“失败原因”压缩在一个结果中，并曾让 OAuth、云端运行和真实来源限制同时参与诊断，导致问题难以隔离。
+`read_url` 的调用方需要的是可信文章文档，不应知道浏览器提取、内存协调、进程生命周期或 tunnel 细节。Gate 0 证明这些层可以连通，但当前 spike 仍由两个手工进程和一个临时扩展组成，且调用必须发生在捕获之后；正式化压力是把复杂度收进一个可监督、可配对、可等待的本机接口。
 
 ## 推荐 seam 与接口
 
@@ -24,10 +24,11 @@ ArticleResult
   request_id, source_url, title, markdown, characters, warnings, limitations
 ```
 
-对外只保留两个用户意图：
+对外只保留一个用户意图：
 
-- `read_url(url)`：尝试当前获准的自动读取通道；成功返回 `ArticleResult`，被微信拦截时返回 `ACTION_REQUIRED_BROWSER`。
-- `submit_article(document)`：接收用户在已正常打开页面中确认提取的文章内容，验证并标准化为同一个 `ArticleResult`。
+- `read_url(url)`：建立有界内存请求，等待用户最多一次浏览器授权并返回 `ArticleResult`。若等待或来源失败，返回明确错误，不要求用户提交正文。
+
+`read_rendered_url` 仅作为迁移期诊断接口；正式插件默认不要求调用方理解或选择它。
 
 调用方不能指定代理、Cookie、任意 header、抓取引擎或供应商。通道选择属于服务内部策略。
 
@@ -35,11 +36,11 @@ ArticleResult
 
 ### LocalReaderSource
 
-连接本地固定 Reader 入口。Phase 1 只验证当前能力，不修改独立安装的 Jina 仓库或容器。后续若确认可靠，再处理启动、健康检查和 Codex/ChatGPT 生命周期联动。
+Gate 0 探针为 `inconclusive`：Mac TUN/Fake-IP 使主机和 Reader 容器都得到保留地址，入口安全检查在 Reader 实际出站前终止，因此没有验证 Reader 或微信访问能力。它不进入当前 L3 主路线，也没有被永久淘汰；除非后续新提案能让安全判断与实际 Reader 出口边界一致并保持 SSRF 防护，否则不再调用或修改。
 
-### BrowserAssistedSource
+### BrowserAssistedSource / CaptureCoordinator
 
-从用户已经正常打开并完成渲染的 Chrome 页面自动提取 DOM 内容。组件只读当前页面，不自行发起文章 fetch/XHR；用户最多执行一次打开或授权动作，不复制、粘贴、打印或上传正文。不得读取或上传 Cookie、localStorage、登录令牌和浏览历史。
+从用户已经正常打开并完成渲染的 Chrome 页面自动提取 DOM 内容。正式候选由 `CaptureCoordinator` 统一管理 request ID、URL hash、deadline、精确扩展身份、每安装令牌、单次消费和内存清除。组件只读当前页面，不自行发起文章 fetch/XHR；用户最多执行一次授权动作，不复制、粘贴、打印或上传正文。不得读取或上传 Cookie、localStorage、登录令牌和浏览历史。
 
 ### RemoteJinaSource
 
@@ -98,24 +99,26 @@ ArticleResult
 
 任一阶段未过，不进入下一阶段。安全逻辑修改前必须捕获可复现的状态、阶段和非敏感响应证据。
 
-## Phase 1：最小可验证切片
+## 已完成：Gate 0 可行性切片
 
-不建设正式扩展或新云服务。先新增一个可重复运行的 Gate 0 测试入口、可丢弃的自动 DOM 提取 spike 和证据日志模板，使用用户后续提供的 3 篇当前文章：
+Gate 0 已完成以下证据：
 
-- 不读取文章地确认 SSH 转发的 Reader 后端边界；
-- 通过 Platform tunnel 分别验证 ChatGPT App/Web 的固定样本；
-- 用户在 Chrome 中确认页面可打开，由 spike 自动读取已渲染 DOM；
-- H0 可解释时调用 Reader 直读一篇，只有成功才继续其余两篇；
-- 记录标题、正文长度、首尾内容、表格/图片引用和失败阶段；
-- 输出不包含正文归档以外的新云端持久化。
+- 本机 Colima Reader 身份已确认，但直读探针被 Mac TUN/Fake-IP 与入口安全检查的边界错位提前终止，结果不具备来源可用性结论。
+- Platform tunnel 的 App/Web 固定探针与真实文章传输通过。
+- Chrome DOM 自动提取对3篇真实文章达到3/3。
+- 正文只存在于内存和本次 MCP 响应，Cloudflare Worker 零调用。
 
-该切片可在一次工作时段完成、结果可检查、且不改变现有插件和云资源。
+## 下一阶段：L3 正式化就绪 Gate
 
-## Gate 0 后的条件分支
+在 full implementation 前分两段验证承重条件。Gate 1A 先验证 App/Web 至少25秒同次调用等待、一次授权后自动返回和精确扩展配对；最多90分钟、USD 0、最多1篇真实文章，完成后强制停止汇报。Gate 1B 只有在另行批准后，才验证用户级后台启动/恢复和 tunnel 受监督恢复；不得在 Gate 1A 中顺带执行。
 
-- 浏览器自动提取3/3且App/Web传输通过：浏览器路线达到L3可行性门槛；Reader直读3/3时再将其作为可选快速通道。
-- Reader直读首篇失败、浏览器自动提取和传输通过：停止剩余Reader调用，不阻断浏览器主路线。
-- 浏览器自动提取或App/Web传输失败：L3 blocked；停止编码，不退回人工搬运正文，也不建设新的云抓取服务。
+## 当前条件分支
+
+- 浏览器自动提取与App/Web传输已通过：路线达到L3可行性门槛。
+- Reader直读未到达后端：证据为 `inconclusive`，当前延期，不阻断浏览器主路线，也不作为回退。
+- Gate 1A 通过：停止并申请 Gate 1B；不得直接提交 full implementation。
+- Gate 1A 与 Gate 1B 全部通过：另行提交 L3 `full-implementation` proposal。
+- 任一正式化承重条件失败：L3保持可行但未产品化；不退回人工搬运正文或云抓取。
 
 ## 开放问题
 

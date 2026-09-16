@@ -1,20 +1,37 @@
 # Status
 
-## Current: hybrid source-gated route
+## Current: L3 formalization readiness proposal
 
-Checkpoint: Proposal policy 1.2 Gate 0 spike was approved on 2026-09-16. The Cloudflare + Jina SaaS fetch route is superseded by real anti-bot evidence; its deployed validation resources remain frozen at zero Gate 0 requests pending explicit cleanup approval.
+Checkpoint: Gate 0 completed on 2026-09-16. A new high-impact spike-only proposal is ready for review; no full implementation or production switch is authorized.
+
+- [x] Gate 0: identify local Reader boundary.
+- [x] Gate 0: extract 3/3 real articles from rendered Chrome DOM.
+- [x] Gate 0: verify fixed and real results through Platform tunnel in ChatGPT App/Web.
+- [x] Stop Reader fast-path probe after host DNS safety gate; do not retry or bypass.
+- [x] Remove disposable Gate 0 extension.
+- [x] Draft L3 formalization readiness proposal.
+- [ ] Obtain approval for bounded Gate 1A spike only.
+- [ ] P8: verify stable extension identity, install token and rejection boundaries.
+- [ ] P6: verify App/Web 5-second control and 25-second minimum same-call window, then one real-article completion per client.
+- [ ] Stop after Gate 1A and report; do not install LaunchAgent or test supervised recovery.
+- [ ] If Gate 1A passes, obtain separate approval for Gate 1B P7/P9 lifecycle and recovery checks.
+- [ ] Stop and submit a separate L3 full-implementation proposal only if both Gate 1A and Gate 1B pass.
+
+## Completed: hybrid source-gated Gate 0
+
+Checkpoint: Proposal policy 1.2 Gate 0 spike was approved and completed on 2026-09-16. The Cloudflare + Jina SaaS fetch route remains frozen pending explicit cleanup approval.
 
 - [x] Record Jina SaaS rate-limit and WeChat environment-verification evidence.
 - [x] Stop treating Cloudflare + Jina SaaS as the production fetch route.
 - [x] Define the automatic-browser/conditional-Reader architecture and Gate 0.
 - [x] Obtain approval to implement the bounded Gate 0 spike.
-- [ ] Receive 3 current WeChat article URLs from the user.
-- [ ] H0: identify the SSH-forwarded Reader backend without an article call; skip H1 if it remains unknown.
-- [ ] H3a/H3b: verify ChatGPT App/Web fixed-fixture transport through Platform tunnel; do not call Worker.
-- [ ] H2: automatically extract the already rendered DOM for 3 articles, once each, with no content copying.
-- [ ] H3c: return one H2 article through local MCP and Platform tunnel to App/Web.
-- [ ] H1: test 1 direct Reader article only after H0; continue to 2 more only if the first succeeds.
-- [ ] Record structured evidence and stop for a new full-implementation proposal decision.
+- [x] Receive 3 current WeChat article URLs from the user.
+- [x] H0: identify the SSH-forwarded Reader backend without an article call.
+- [x] H3a/H3b: verify ChatGPT App/Web fixed-fixture transport through Platform tunnel; do not call Worker.
+- [x] H2: automatically extract the already rendered DOM for 3 articles, once each, with no content copying.
+- [x] H3c: return one H2 article through local MCP and Platform tunnel to App/Web.
+- [x] H1: run one direct Reader entry probe and stop at `UNSAFE_DESTINATION`; no retry.
+- [x] Record structured evidence and stop for a new implementation-readiness proposal decision.
 - [ ] Obtain separate approval before plugin switching or cloud credential/resource cleanup.
 
 ## Superseded: v3/v4 Cloudflare validation
