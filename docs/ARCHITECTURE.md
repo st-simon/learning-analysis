@@ -110,14 +110,13 @@ Gate 0 已完成以下证据：
 
 ## 下一阶段：L3 正式化就绪 Gate
 
-在 full implementation 前分两段验证承重条件。Gate 1A 先验证 App/Web 至少25秒同次调用等待、一次授权后自动返回和精确扩展配对；最多90分钟、USD 0、最多1篇真实文章，完成后强制停止汇报。Gate 1B 只有在另行批准后，才验证用户级后台启动/恢复和 tunnel 受监督恢复；不得在 Gate 1A 中顺带执行。
+在 full implementation 前分两段验证承重条件。Gate 1A 已验证 App/Web 同次调用等待、一次授权后自动返回和精确扩展配对。Gate 1B 已在另行批准后验证 disposable 用户级 LaunchAgent：初始启动、一次受监督恢复、恢复前后 App 固定探针和完整卸载均通过；该验证没有让 capture bridge 常驻，也没有验证自然登录/重启。
 
 ## 当前条件分支
 
 - 浏览器自动提取与App/Web传输已通过：路线达到L3可行性门槛。
 - Reader直读未到达后端：证据为 `inconclusive`，当前延期，不阻断浏览器主路线，也不作为回退。
-- Gate 1A 通过：停止并申请 Gate 1B；不得直接提交 full implementation。
-- Gate 1A 与 Gate 1B 全部通过：另行提交 L3 `full-implementation` proposal。
+- Gate 1A 与 disposable Gate 1B 已全部通过：下一步只能另行提交 L3 `full-implementation` proposal，不得把 spike 直接转为生产安装。
 - 任一正式化承重条件失败：L3保持可行但未产品化；不退回人工搬运正文或云抓取。
 
 ## 开放问题

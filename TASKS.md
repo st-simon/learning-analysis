@@ -2,7 +2,7 @@
 
 ## Current: L3 formalization readiness proposal
 
-Checkpoint: Gate 0 completed on 2026-09-16. A new high-impact spike-only proposal is ready for review; no full implementation or production switch is authorized.
+Checkpoint: Gate 1A-R and disposable Gate 1B verified on 2026-09-18. Gate 1B runtime was fully removed; full implementation and production switch remain unauthorized.
 
 - [x] Gate 0: identify local Reader boundary.
 - [x] Gate 0: extract 3/3 real articles from rendered Chrome DOM.
@@ -10,11 +10,12 @@ Checkpoint: Gate 0 completed on 2026-09-16. A new high-impact spike-only proposa
 - [x] Stop Reader fast-path probe after host DNS safety gate; do not retry or bypass.
 - [x] Remove disposable Gate 0 extension.
 - [x] Draft L3 formalization readiness proposal.
-- [ ] Obtain approval for bounded Gate 1A spike only.
-- [ ] P8: verify stable extension identity, install token and rejection boundaries.
-- [ ] P6: verify App/Web 5-second control and 25-second minimum same-call window, then one real-article completion per client.
-- [ ] Stop after Gate 1A and report; do not install LaunchAgent or test supervised recovery.
-- [ ] If Gate 1A passes, obtain separate approval for Gate 1B P7/P9 lifecycle and recovery checks.
+- [x] Obtain approval for bounded Gate 1A spike only.
+- [x] P8/P14: verify stable extension identity, install token and rejection boundaries.
+- [x] P6/P13/P15: verify wait window, tunnel preflight and one App real-article completion.
+- [x] Stop after Gate 1A-R, clean temporary state, and record verified evidence.
+- [x] Obtain separate approval for Gate 1B P7/P9 lifecycle and recovery checks.
+- [x] Gate 1B: verify user-domain bootstrap, secret-safe wrapper, one kill/recovery, fixed App probes and complete uninstall.
 - [ ] Stop and submit a separate L3 full-implementation proposal only if both Gate 1A and Gate 1B pass.
 
 ## Completed: hybrid source-gated Gate 0
