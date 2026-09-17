@@ -118,6 +118,19 @@ class CaptureCoordinator:
             self._pending[request_id] = _PendingCapture(source_url=source_url)
             self._request_by_url[source_url] = request_id
 
+    def is_pending(self, source_url: str) -> bool:
+        source_url = _validate_source_url(source_url)
+        with self._condition:
+            request_id = self._request_by_url.get(source_url)
+            if request_id is None:
+                return False
+            pending = self._pending.get(request_id)
+            return bool(
+                pending is not None
+                and not pending.cancelled
+                and pending.capture is None
+            )
+
     def accept(self, capture: dict) -> str:
         source_url = capture["source_url"]
         with self._condition:
@@ -178,13 +191,28 @@ class CaptureApplication:
         if not EXTENSION_ID_PATTERN.fullmatch(extension_id):
             raise ValueError("valid extension_id is required")
         self._token = token
+        self._extension_id = extension_id
         self._allowed_origin = f"chrome-extension://{extension_id}"
         self._coordinator = coordinator or CaptureCoordinator()
+
+    @property
+    def allowed_origin(self) -> str:
+        return self._allowed_origin
 
     def _authorized(self, headers: dict[str, str]) -> bool:
         return hmac.compare_digest(
             headers.get("authorization", ""), f"Bearer {self._token}"
         )
+
+    def _require_extension_identity(
+        self, headers: dict[str, str], origin: str
+    ) -> None:
+        if origin:
+            if origin != self._allowed_origin:
+                raise CaptureError("FORBIDDEN_ORIGIN")
+            return
+        if headers.get("x-learning-analysis-extension-id") != self._extension_id:
+            raise CaptureError("FORBIDDEN_EXTENSION")
 
     @staticmethod
     def _json(status: int, payload: dict) -> tuple[int, dict[str, str], bytes]:
@@ -196,20 +224,35 @@ class CaptureApplication:
         parsed = urlsplit(target)
         origin = headers.get("origin", "")
         try:
-            if method == "OPTIONS" and parsed.path == "/capture":
+            if method == "OPTIONS" and parsed.path in ("/capture", "/pending"):
                 if origin != self._allowed_origin:
                     raise CaptureError("FORBIDDEN_ORIGIN")
                 return 204, {
                     "Access-Control-Allow-Origin": origin,
-                    "Access-Control-Allow-Methods": "POST",
-                    "Access-Control-Allow-Headers": "Authorization, Content-Type",
+                    "Access-Control-Allow-Methods": "GET, POST",
+                    "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Learning-Analysis-Extension-Id",
                     "Cache-Control": "no-store",
                 }, b""
             if method == "GET" and parsed.path == "/healthz":
                 return self._json(200, {"status": "ok", "persistent_write": False})
+            if method == "GET" and parsed.path == "/pending":
+                self._require_extension_identity(headers, origin)
+                if not self._authorized(headers):
+                    return self._json(401, {"status": "error", "error_code": "UNAUTHORIZED"})
+                values = parse_qs(parsed.query, strict_parsing=True)
+                if set(values) != {"url"} or len(values["url"]) != 1:
+                    raise CaptureError("INVALID_SOURCE_URL")
+                source_url = _validate_source_url(values["url"][0])
+                ready = self._coordinator.is_pending(source_url)
+                status, response_headers, response_body = self._json(
+                    200 if ready else 404,
+                    {"status": "PENDING_READY" if ready else "NO_PENDING"},
+                )
+                if origin:
+                    response_headers["Access-Control-Allow-Origin"] = origin
+                return status, response_headers, response_body
             if method == "POST" and parsed.path == "/capture":
-                if origin != self._allowed_origin:
-                    raise CaptureError("FORBIDDEN_ORIGIN")
+                self._require_extension_identity(headers, origin)
                 if not self._authorized(headers):
                     return self._json(401, {"status": "error", "error_code": "UNAUTHORIZED"})
                 if len(body) > MAX_CAPTURE_CHARACTERS * 4:
@@ -222,7 +265,8 @@ class CaptureApplication:
                     "characters": capture["characters"],
                     "persistent_write": False,
                 })
-                response_headers["Access-Control-Allow-Origin"] = origin
+                if origin:
+                    response_headers["Access-Control-Allow-Origin"] = origin
                 return status, response_headers, response_body
             if method == "GET" and parsed.path == "/capture":
                 if not self._authorized(headers):
@@ -240,6 +284,7 @@ class CaptureApplication:
             code = exc.code if isinstance(exc, CaptureError) else "INVALID_CAPTURE"
             status = {
                 "FORBIDDEN_ORIGIN": 403,
+                "FORBIDDEN_EXTENSION": 403,
                 "CAPTURE_NOT_FOUND": 404,
                 "CAPTURE_TIMEOUT": 408,
                 "CAPTURE_BUSY": 409,

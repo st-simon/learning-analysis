@@ -1,4 +1,4 @@
-importScripts("install_config.js");
+importScripts("install_config.js", "capture_flow.js");
 
 function extractRenderedArticle() {
   const sourceUrl = new URL(window.location.href);
@@ -64,21 +64,50 @@ async function setBadge(text, color) {
   await chrome.action.setBadgeText({text});
 }
 
+async function submitCapture(capture) {
+  const response = await fetch("http://127.0.0.1:18431/capture", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${globalThis.GATE1A_INSTALL_TOKEN}`,
+      "X-Learning-Analysis-Extension-Id": chrome.runtime.id,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(capture),
+  });
+  if (response.ok) return;
+  if (response.status === 401 || response.status === 403) {
+    throw new CaptureFlow.CaptureFlowError("AUTH");
+  }
+  if (response.status === 404 || response.status === 408 || response.status === 409) {
+    throw new CaptureFlow.CaptureFlowError("TIME");
+  }
+  if (response.status === 400 || response.status === 413) {
+    throw new CaptureFlow.CaptureFlowError("PAGE");
+  }
+  throw new CaptureFlow.CaptureFlowError("SEND");
+}
+
 chrome.action.onClicked.addListener(async (tab) => {
   try {
     if (!tab.id) throw new Error("NO_ACTIVE_TAB");
-    const [{result}] = await chrome.scripting.executeScript({target: {tabId: tab.id}, func: extractRenderedArticle});
-    const response = await fetch("http://127.0.0.1:18431/capture", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${globalThis.GATE1A_INSTALL_TOKEN}`,
-        "Content-Type": "application/json",
+    await setBadge("WAIT", "#1a73e8");
+    const sourceUrl = CaptureFlow.normalizeSourceUrl(tab.url);
+    await CaptureFlow.runCaptureFlow(sourceUrl, {
+      token: globalThis.GATE1A_INSTALL_TOKEN,
+      extensionId: chrome.runtime.id,
+      extractFn: async () => {
+        const [{result}] = await chrome.scripting.executeScript({
+          target: {tabId: tab.id},
+          func: extractRenderedArticle,
+        });
+        return result;
       },
-      body: JSON.stringify(result),
+      submitFn: submitCapture,
     });
-    if (!response.ok) throw new Error(`BRIDGE_${response.status}`);
     await setBadge("OK", "#188038");
-  } catch (_error) {
-    await setBadge("ERR", "#b3261e");
+  } catch (error) {
+    const code = error instanceof CaptureFlow.CaptureFlowError ? error.code : "SEND";
+    const badge = ["PAGE", "AUTH", "URL", "TIME", "SEND"].includes(code) ? code : "SEND";
+    await setBadge(badge, "#b3261e");
   }
 });

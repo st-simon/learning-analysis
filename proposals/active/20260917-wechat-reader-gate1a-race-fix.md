@@ -5,18 +5,18 @@
 - Proposal policy version: 1.2
 - Impact level: high
 - Impact triggers: architecture, trust-boundary, sensitive-data, route-invalidating-uncertainty
-- Status: approved
+- Status: verified
 - Approval scope: spike-only
-- Core gate: pending
+- Core gate: passed
 - Cost gate: not-applicable
 - Contradiction gate: clear
 - Outcome confirmation: confirmed
-- Confirmation source: 用户于 2026-09-17 在获知下一步必须先提交新 proposal、修复点击/pending 竞态与脱敏错误分类后明确“批准继续”
+- Confirmation source: 用户于 2026-09-17 批准竞态修复，并于 2026-09-18 明确批准加入 tunnel 四项机器预检及恢复一次 R3 额度的窄范围修订
 - Assumption freshness gate: recheck-required
 - External evidence gate: passed
 - Rollback gate: ready
 - Implementation verification: stage-gated
-- 更新日期：2026-09-17
+- 更新日期：2026-09-18
 - 项目：learning-analysis
 - 分支：codex/gce-reader-implementation（沿用当前分支，不创建新分支）
 - Security/Ops：required；涉及已渲染网页正文、loopback 入口、扩展身份和本地运行令牌
@@ -31,11 +31,11 @@
 
 | ID | Necessary condition | Type | State | Evidence |
 |---|---|---|---|---|
-| C1 | 用户的一次点击在 pending 登记之前或之后发生，都能与同一 URL 的当前请求可靠会合 | required | unverified | 当前实现只接受 pending 已存在后的提交；真实 App 测试超时 |
-| C2 | 会合必须精确绑定规范化 URL、配对扩展 Origin 和每安装令牌，且只消费一次 | required | unverified | Gate 1A 已验证 Origin/token；新增 readiness 接口后需重验 |
-| C3 | 用户能从脱敏、分阶段错误中区分“等待请求”“页面不符”“配对失败”“提交失败”和“超时” | required | unverified | 当前扩展把所有异常折叠为红色 `ERR` |
+| C1 | 用户的一次点击在 pending 登记之前或之后发生，都能与同一 URL 的当前请求可靠会合 | required | met | 早/晚点击、超时、重复响应和跨 URL 隔离测试通过；真实 Chrome 有界等待通过 |
+| C2 | 会合必须精确绑定规范化 URL、配对扩展身份和每安装令牌，且只消费一次 | required | met | 缺失 Origin 的真实 Chrome 0.1.2 请求已通过精确扩展 ID + 随机 token 鉴权；错误组合矩阵与一次消费测试通过 |
+| C3 | 用户能从脱敏、分阶段错误中区分“等待请求”“页面不符”“配对失败”“提交失败”和“超时” | required | met | 自动分类测试通过，真实 Chrome 已分别观察 `AUTH` 与 `TIME` |
 | C4 | 正文不落盘、不进入日志、不提前缓存在桥中，也不发送到 Cloudflare/Jina | required | met | 现有路线为本机内存传输；新方案必须保持该边界 |
-| C5 | 本地门槛通过后，一次 App 真实文章测试在同一次调用中返回结果 | required | unverified | 上一次真实测试约 25 秒后 `CAPTURE_TIMEOUT` |
+| C5 | 本地门槛通过后，一次 App 真实文章测试在同一次调用中返回结果 | required | met | P15 全绿后，恢复的单次 App 调用与一次扩展点击成功返回 rendered DOM 结果 |
 
 ## Constraints And Quality Gates
 
@@ -94,19 +94,23 @@
 
 | ID | Claim | Consequence if false | Evidence state | Volatility | Verified at | Recheck by / trigger | Cheapest falsification probe | Stop condition | Affected route |
 |---|---|---|---|---|---|---|---|---|---|
-| H10 | 在用户停留于同一文章标签页期间，Chrome `activeTab` 授权可覆盖有界等待；扩展 service worker 能在不超过20秒的轮询中继续执行 | 无法安全采用“先等候、后提取” | unverified | volatile | pending | 实现前及 Chrome/Manifest 变化时 | 官方文档核验后，运行一次不读取正文的有界 readiness fixture | 授权提前撤销、worker 中止或必须新增宽权限 | A |
-| H11 | 早点击后 pending 延迟出现时，扩展最终只提交一次；晚点击仍立即提交 | 核心竞态未修复或产生重复消费 | unverified | stable | pending | 协调器或扩展时序逻辑变化时 | 用可控延迟覆盖 click-before-pending、pending-before-click、永不 pending 和重复响应 | 任一顺序丢失、重复提交或跨 URL 会合 | A |
-| H12 | readiness 接口能保持 Origin/token/URL 边界，错误分类不泄露正文、完整 URL 或令牌 | 新接口扩大本机攻击面或敏感信息泄露 | unverified | stable | pending | 接口、认证或日志变化时 | 正确/错误 Origin、token、URL 及日志脱敏契约测试 | 未授权请求获知状态、提交成功或日志泄露敏感信息 | A |
-| H13 | R0-R2 通过后，一次 App 真实文章测试可在同一次调用、一次点击内成功返回 | 用户体验仍不成立 | unverified | volatile | pending | Platform、tunnel-client、Chrome 或 MCP 变化时 | 只运行一次 App 真实文章测试 | 超时、需第二次动作、错误分类不明或发生未批准持久化 | A/L3 |
+| H10 | 在用户停留于同一文章标签页期间，Chrome `activeTab` 授权可覆盖有界等待；扩展 service worker 能在不超过20秒的轮询中继续执行 | 无法安全采用“先等候、后提取” | verified | volatile | 2026-09-17 | Chrome/Manifest 变化时 | 官方文档核验后，运行一次不读取正文的有界 readiness fixture | 授权提前撤销、worker 中止或必须新增宽权限 | A |
+| H11 | 早点击后 pending 延迟出现时，扩展最终只提交一次；晚点击仍立即提交 | 核心竞态未修复或产生重复消费 | verified | stable | 2026-09-17 | 协调器或扩展时序逻辑变化时 | 用可控延迟覆盖 click-before-pending、pending-before-click、永不 pending 和重复响应 | 任一顺序丢失、重复提交或跨 URL 会合 | A |
+| H12 | Chrome extension service worker 的 loopback 请求会携带可精确校验的扩展 Origin，从而保持 Origin/token/URL 三重边界 | 无法按已批准安全模型识别浏览器调用来源 | contradicted | volatile | 2026-09-17 | Chrome、Manifest 或传输机制变化时 | 真实 Chrome R2 点击并记录脱敏 method/origin class | 实际 `GET /pending` 的 Origin 缺失，当前实现正确返回403 | A |
+| H13 | R0-R2 通过后，一次 App 真实文章测试可在同一次调用、一次点击内成功返回 | 用户体验仍不成立 | verified | volatile | 2026-09-18 | Platform、tunnel-client、Chrome 或 MCP 变化时 | 先机器核验 tunnel live/ready，再只运行一次 App 真实文章测试 | P15通过后恢复的一次App调用和一次点击返回成功 | A/L3 |
+| H14 | Origin 缺失时，精确 `chrome.runtime.id` 头与随机安装 token 能维持配对边界；非空错误 Origin 始终被拒 | loopback 可能接受错误浏览器来源或配置串线 | verified | stable | 2026-09-17 | 扩展ID、header合同或token机制变化时 | 缺失Origin下的正确/错误ID/token矩阵 + 真实Chrome R2 | 任一错误组合被接受或真实扩展仍被拒 | A修订路线 |
+| H15 | R3 前可以机器化证明预期 tunnel-client 进程、控制面成功轮询、`health/ready` 与 App 固定探针均属于同一活动实例 | 无法区分产品失败与未启动/错实例的测试环境失败 | verified | volatile | 2026-09-18 | 每次真实文章测试前 | PID/URL 文件 + `tunnel-client health --require-control-plane-poll --json` + App `gate0_transport_probe` 与本机转发证据 | 四项任一不通过即不得加载扩展或消耗文章额度 | A修订路线 |
 
 ## Spike Evidence
 
 | Probe ID | Assumption ID | Environment | Expected falsifier | Observed result | Evidence path | Decision |
 |---|---|---|---|---|---|---|
-| P10 | H10 | 当前 Chrome 152、unpacked 扩展、loopback readiness fixture | 等待中授权失效、worker 被终止或需要新增权限 | not run | `docs/gate1a-race-fix-evidence.md#p10` | not-run |
-| P11 | H11 | 纯本地确定性 coordinator/extension 协议测试 | 早点击丢失、重复提交、跨 URL 会合或无界等待 | not run | `docs/gate1a-race-fix-evidence.md#p11` | not-run |
-| P12 | H12 | loopback 合同、安全与脱敏日志测试 | 错误凭据可查询/提交，或错误输出泄露敏感数据 | not run | `docs/gate1a-race-fix-evidence.md#p12` | not-run |
-| P13 | H13 | ChatGPT App、现有 Platform tunnel、1篇公开文章 | 不能在同次调用和一次点击内返回 | not run | `docs/gate1a-race-fix-evidence.md#p13` | not-run |
+| P10 | H10 | 当前 Chrome 152、unpacked 扩展、loopback readiness fixture | 等待中授权失效、worker 被终止或需要新增权限 | 真实点击显示蓝色 `WAIT`，约20秒后准确结束为红色 `TIME`；未新增权限、未读取正文 | `docs/gate1a-race-fix-evidence.md#p10` | passed |
+| P11 | H11 | 纯本地确定性 coordinator/extension 协议测试 | 早点击丢失、重复提交、跨 URL 会合或无界等待 | 6项扩展流程测试、30项Python回归与真实loopback协议集成通过 | `docs/gate1a-race-fix-evidence.md#p11` | passed |
+| P12 | H12 | loopback 合同、安全与脱敏日志测试 + 真实 Chrome 152 请求 | 错误凭据可查询/提交，浏览器不提供承重身份信号，或错误输出泄露敏感数据 | 自动合同测试通过；真实 `GET /pending` 连续返回 `FORBIDDEN_ORIGIN`，脱敏分类为 `origin_class=MISSING` | `docs/gate1a-race-fix-evidence.md#p12` | failed |
+| P13 | H13 | ChatGPT App、现有 Platform tunnel、1篇公开文章 | 不能在同次调用和一次点击内返回 | 首次因tunnel缺失而inconclusive；P15修订后恢复的一次调用约5.9秒成功，扩展绿色OK，返回rendered_dom且零持久化 | `docs/gate1a-race-fix-evidence.md#p13` | passed |
+| P14 | H14 | 应用合同、Node扩展流程、真实loopback集成与Chrome 152 | 错误ID/token/Origin被接受，或真实扩展无法鉴权 | 自动矩阵、34项Python、6项JavaScript、MCP smoke及无Origin loopback集成均通过；真实Chrome 0.1.2 从 `WAIT` 到 `TIME`，不再出现 `AUTH` | `docs/gate1a-race-fix-evidence.md#p14` | passed |
+| P15 | H15 | 本机 tunnel-client 0.0.14、现有 Platform tunnel、ChatGPT App 固定无网络探针 | 任一实例身份、控制面轮询、health/ready 或端到端固定调用缺失 | PID、控制面成功poll、同实例health/ready通过；App固定JSON成功且同实例记录CallToolRequest转发 | `docs/gate1a-race-fix-evidence.md#p15` | passed |
 
 ## External Claims Evidence
 
@@ -122,6 +126,21 @@
 选择 A：增加一个只暴露布尔 readiness 的窄接口，让扩展在单次用户点击后先等待匹配 pending，再提取并提交。该方案修复确定性的时序缺口，同时保持正文不缓存、权限不扩大和一次用户动作的目标。
 
 不采用 B，因为它在 pending 之前处理并保存完整正文，新增陈旧数据、清理、内存和隐私风险；不采用 C，因为它直接违反“同一次读取流程、最多一次点击”的核心结果。
+
+### R2 contradiction and required amendment
+
+2026-09-17 的真实 Chrome 152 R2 证伪了“extension service worker loopback `fetch()` 总会携带 `Origin`”这一承重假设。Chrome 官方文档确认扩展 service worker 在声明 `host_permissions` 后可以直接执行跨源 `fetch()`，但没有承诺请求一定携带可供服务端认证的 `Origin`。实际请求为 `GET /pending`、token 配置一致、扩展 ID 正确，但 `Origin` 缺失，因此当前服务端按批准模型正确拒绝。
+
+建议的最小修订尚未获批准：
+
+1. 扩展在 readiness 与 capture 请求中增加 `X-Learning-Analysis-Extension-Id: chrome.runtime.id`；
+2. 服务端仍强制随机安装 token、固定 loopback、URL allowlist 和一次消费；
+3. `Origin` 非空时必须精确匹配，任何其他网页 Origin 即使带自定义头也拒绝；
+4. 仅在 `Origin` 缺失、扩展 ID 头精确匹配且 token 正确时接受请求；
+5. 自定义扩展 ID 头不是秘密，身份认证仍由每安装随机 token 提供；它只用于防止配置串线和保留明确实例绑定；
+6. R0/R1 必须新增缺失 Origin + 正确/错误 ID/token 的矩阵，真实 R2 通过后才恢复 R3。
+
+替代路线是 Native Messaging，以浏览器 `allowed_origins` 获得更强的原生扩展绑定，但会新增权限、host manifest、安装流程和接口，不属于本 proposal 的窄修订。直接取消 Origin 检查而只保留 token 也不采用。
 
 ## Architecture And Technology
 
@@ -159,9 +178,10 @@ Authorization: Bearer <install-token>
 | Gate R0：确定性回归 | 先用测试稳定重现“点击早于 pending 被丢弃”，再证明早/晚点击、超时、重复响应和跨 URL 隔离全部通过 | 不能稳定复现旧故障，或修复需要正文缓存/第二次动作 | P11、测试输出、最小 diff |
 | Gate R1：合同与安全 | readiness 和 capture 均执行精确 Origin/token/URL 校验；未授权请求被拒；日志与错误通过脱敏检查 | 新权限、敏感信息泄露、正文持久化或未授权状态查询 | P12、安全矩阵、日志审计 |
 | Gate R2：Chrome 有界等待 | 同一标签页的一次点击可显示 `WAIT` 并在 pending 出现后进入确定终态；ID 保持既有值；不新增权限 | worker/activeTab 在20秒内失效、ID漂移、需重载以外操作或出现笼统 `ERR` | P10、manifest diff、badge 状态记录 |
+| Gate R2.5：Tunnel 四项预检 | PID 文件指向活动实例；控制面至少一次成功 poll；同一实例 `/healthz` 与 `/readyz` 通过；App `gate0_transport_probe` 返回固定 JSON 且本机记录一次转发 | 任一项缺失、不属于同一实例、需要刷新 schema/改变连接，或 fixture 未到达本机 | P15、`tunnel-client health --require-control-plane-poll --json`、脱敏转发时间线 |
 | Gate R3：一次 App 真实文章 | 一篇文章在同一次 App 调用中、一次扩展点击后返回 `status=ok`，并保持 `network_used=false`、`persistent_write=false` | 任一失败、超时、第二次动作、错误无法定位或边界违规；不重试 | P13、脱敏原始结果与时间线 |
 
-阶段必须顺序执行。R0-R2 任一失败，不得安装或运行 R3。R3 无论通过或失败都立即停止并汇报；不得顺带测试 Web 或进入 Gate 1B。
+阶段必须顺序执行。R0-R2.5 任一失败，不得安装扩展或运行 R3。R2.5 的固定探针不读取文章、不消耗 R3 额度。R3 无论通过或失败都立即停止并汇报；不得顺带测试 Web 或进入 Gate 1B。
 
 ## Fallback, Rollback, And Exit
 
@@ -178,8 +198,8 @@ Authorization: Bearer <install-token>
 
 - Time limit: 最多90分钟有效执行时间；优先完成 R0-R2，时间不足时不启动 R3。
 - Cost limit: USD 0。
-- Data limit: R0-R2 仅用无正文 fixture；R3 最多使用1篇用户已提供的公开文章，正文不落盘。
-- Retry limit: 每个确定性测试可在修复周期中重复；浏览器人工状态检查最多两次；R3 真实文章严格一次，失败不重试。
+- Data limit: R0-R2.5 仅用无正文 fixture；批准修订后 R3 恢复最多1篇用户新提供的公开文章，正文不落盘。
+- Retry limit: 每个确定性测试可在修复周期中重复；tunnel 四项预检必须全绿；浏览器人工状态检查最多两次；恢复后的 R3 真实文章严格一次，失败不重试。
 - Exit condition: R3 获得一次明确 pass/fail，或任何前置 Gate 失败、达到90分钟、发生边界违规时立即停止。
 
 ## Cost Evidence
@@ -263,8 +283,8 @@ Authorization: Bearer <install-token>
 - 证据文档记录时间线、版本、结果与残余风险；
 - 未执行 Web、Gate 1B、Cloudflare/Jina 或任何非本提案动作。
 
-若 R3 失败，本 proposal 转为 `blocked`，保留证据并停止；不得把 R0-R2 通过等同于用户结果完成。
+第一次 R3 因执行前未确认 tunnel-client 在线而失败，保留证据且不得把 R0-R2 通过等同于用户结果完成。用户于 2026-09-18 批准窄范围修订：必须先通过机器可判定的 tunnel process、control-plane connection、health/ready 和固定 fixture 四项前置门槛，才恢复一次新的真实文章额度。
 
 ## State Transition Plan
 
-用户已于 2026-09-17 明确批准本 proposal，当前状态为 `approved`。开始首个实现动作时转为 `in_progress`。R0-R3 和清理全部通过后依次转为 `implemented`、`verified`；任一 load-bearing assumption 被证伪或边界触发时立即转为 `blocked`。如果需要正文缓存、第二次用户动作、权限扩大或新传输路线，本 proposal 不得自行修改路线，必须停止并提交替代 proposal。
+用户已于 2026-09-17 明确批准原 proposal；R2 真实浏览器证据随后证伪 H12。用户又于同日批准“缺失 Origin + 精确扩展 ID 头 + 随机 token”的最小安全修订，R2 随后通过。第一次 R3 因遗漏 tunnel-client 在线核验而未到达本地 bridge，清理已完成。用户于 2026-09-18 批准 tunnel 四项预检与一次 R3 重验额度；P15 与恢复后的 R3 均通过，临时文件、进程和扩展已清理并完成回归核验，当前为 `verified`。不进入 Web 或 Gate 1B；归档与 Git 交付可在用户明确授权 commit/push 时完成。

@@ -22,7 +22,7 @@ from browser_capture import (
     fetch_capture,
     normalize_capture,
 )
-from browser_capture_server import make_handler
+from browser_capture_server import make_handler, redacted_error_event
 
 
 EXTENSION_MANIFEST = Path(__file__).resolve().parent / "spike" / "browser-source-extension" / "manifest.json"
@@ -41,6 +41,56 @@ class ExtensionIdentityTests(unittest.TestCase):
         self.assertEqual(extension_id, DEFAULT_EXTENSION_ID)
         self.assertEqual(manifest["permissions"], ["activeTab", "scripting"])
         self.assertEqual(manifest["host_permissions"], ["http://127.0.0.1:18431/*"])
+
+
+class CaptureDiagnosticsTests(unittest.TestCase):
+    def test_error_event_is_stage_only_and_suppresses_expected_poll_miss(self):
+        self.assertIsNone(
+            redacted_error_event(
+                "GET",
+                "/pending?url=https%3A%2F%2Fmp.weixin.qq.com%2Fs%2Fsecret",
+                404,
+                b'{"status":"NO_PENDING"}',
+            )
+        )
+        event = redacted_error_event(
+            "GET",
+            "/pending?url=https%3A%2F%2Fmp.weixin.qq.com%2Fs%2Fsecret",
+            403,
+            b'{"status":"error","error_code":"FORBIDDEN_ORIGIN"}',
+            headers={"Origin": "chrome-extension://other-extension"},
+            allowed_origin="chrome-extension://expected-extension",
+        )
+        self.assertEqual(event, {
+            "stage": "pending",
+            "status": "error",
+            "request_method": "GET",
+            "http_status": 403,
+            "error_code": "FORBIDDEN_ORIGIN",
+            "origin_class": "OTHER_EXTENSION",
+        })
+        serialized = json.dumps(event)
+        self.assertNotIn("mp.weixin", serialized)
+        self.assertNotIn("secret", serialized)
+
+    def test_origin_classification_does_not_log_origin_value(self):
+        cases = [
+            ({}, "MISSING"),
+            ({"Origin": "chrome-extension://expected-extension"}, "EXACT"),
+            ({"Origin": "chrome-extension://expected-extension/"}, "EXACT_TRAILING_SLASH"),
+        ]
+        for headers, expected in cases:
+            with self.subTest(expected=expected):
+                event = redacted_error_event(
+                    "OPTIONS",
+                    "/pending?url=redacted",
+                    403,
+                    b'{"status":"error","error_code":"FORBIDDEN_ORIGIN"}',
+                    headers=headers,
+                    allowed_origin="chrome-extension://expected-extension",
+                )
+                self.assertEqual(event["origin_class"], expected)
+                self.assertNotIn("expected-extension", json.dumps(event))
 
 
 class CaptureContractTests(unittest.TestCase):
@@ -181,6 +231,28 @@ class CaptureApplicationTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(body)["markdown"], "body")
 
+    def test_extension_can_observe_pending_before_extracting_article(self):
+        pending_target = "/pending?url=https%3A%2F%2Fmp.weixin.qq.com%2Fs%2Fa"
+        headers = {
+            "origin": self.origin,
+            "authorization": f"Bearer {self.token}",
+        }
+
+        status, response_headers, body = self.app.handle(
+            "GET", pending_target, headers, b""
+        )
+        self.assertEqual(status, 404)
+        self.assertEqual(json.loads(body), {"status": "NO_PENDING"})
+        self.assertEqual(response_headers["Access-Control-Allow-Origin"], self.origin)
+
+        self.app._coordinator.begin("https://mp.weixin.qq.com/s/a", "request-a")
+        status, response_headers, body = self.app.handle(
+            "GET", pending_target, headers, b""
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), {"status": "PENDING_READY"})
+        self.assertEqual(response_headers["Access-Control-Allow-Origin"], self.origin)
+
     def test_web_page_cannot_submit_and_unauthorized_client_cannot_read(self):
         status, _, _ = self.app.handle(
             "POST", "/capture", {"origin": "https://mp.weixin.qq.com"}, self.payload
@@ -212,6 +284,112 @@ class CaptureApplicationTests(unittest.TestCase):
         self.assertEqual(status, 401)
         self.assertEqual(json.loads(body)["error_code"], "UNAUTHORIZED")
 
+    def test_pending_readiness_rejects_wrong_origin_token_and_url(self):
+        pending_target = "/pending?url=https%3A%2F%2Fmp.weixin.qq.com%2Fs%2Fa"
+
+        status, _, body = self.app.handle(
+            "GET",
+            pending_target,
+            {
+                "origin": "chrome-extension://ponmlkjihgfedcbaponmlkjihgfedcba",
+                "authorization": f"Bearer {self.token}",
+            },
+            b"",
+        )
+        self.assertEqual(status, 403)
+        self.assertEqual(json.loads(body)["error_code"], "FORBIDDEN_ORIGIN")
+
+        status, _, body = self.app.handle(
+            "GET",
+            pending_target,
+            {"origin": self.origin, "authorization": "Bearer wrong-token"},
+            b"",
+        )
+        self.assertEqual(status, 401)
+        self.assertEqual(json.loads(body)["error_code"], "UNAUTHORIZED")
+
+        status, _, body = self.app.handle(
+            "GET",
+            "/pending?url=https%3A%2F%2Fexample.com%2Fs%2Fa",
+            {
+                "origin": self.origin,
+                "authorization": f"Bearer {self.token}",
+            },
+            b"",
+        )
+        self.assertEqual(status, 400)
+        self.assertEqual(json.loads(body)["error_code"], "INVALID_SOURCE_URL")
+
+    def test_pending_readiness_does_not_expose_request_or_article_data(self):
+        self.app._coordinator.begin("https://mp.weixin.qq.com/s/a", "secret-request")
+        status, _, body = self.app.handle(
+            "GET",
+            "/pending?url=https%3A%2F%2Fmp.weixin.qq.com%2Fs%2Fa",
+            {
+                "origin": self.origin,
+                "authorization": f"Bearer {self.token}",
+            },
+            b"",
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body, b'{"status": "PENDING_READY"}')
+        self.assertNotIn(b"secret-request", body)
+        self.assertNotIn(b"mp.weixin.qq.com", body)
+
+    def test_missing_origin_requires_exact_extension_id_header_and_token(self):
+        pending_target = "/pending?url=https%3A%2F%2Fmp.weixin.qq.com%2Fs%2Fa"
+        base_headers = {"authorization": f"Bearer {self.token}"}
+
+        for extension_id in (None, "ponmlkjihgfedcbaponmlkjihgfedcba"):
+            headers = dict(base_headers)
+            if extension_id is not None:
+                headers["x-learning-analysis-extension-id"] = extension_id
+            status, _, body = self.app.handle(
+                "GET", pending_target, headers, b""
+            )
+            self.assertEqual(status, 403)
+            self.assertEqual(json.loads(body)["error_code"], "FORBIDDEN_EXTENSION")
+
+        status, _, body = self.app.handle(
+            "GET",
+            pending_target,
+            {
+                **base_headers,
+                "origin": "https://mp.weixin.qq.com",
+                "x-learning-analysis-extension-id": self.extension_id,
+            },
+            b"",
+        )
+        self.assertEqual(status, 403)
+        self.assertEqual(json.loads(body)["error_code"], "FORBIDDEN_ORIGIN")
+
+        self.app._coordinator.begin("https://mp.weixin.qq.com/s/a", "request-a")
+        status, _, body = self.app.handle(
+            "GET",
+            pending_target,
+            {
+                **base_headers,
+                "x-learning-analysis-extension-id": self.extension_id,
+            },
+            b"",
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), {"status": "PENDING_READY"})
+
+    def test_missing_origin_extension_can_submit_with_exact_id_header(self):
+        self.app._coordinator.begin("https://mp.weixin.qq.com/s/a", "request-a")
+        status, _, body = self.app.handle(
+            "POST",
+            "/capture",
+            {
+                "authorization": f"Bearer {self.token}",
+                "x-learning-analysis-extension-id": self.extension_id,
+            },
+            self.payload,
+        )
+        self.assertEqual(status, 202)
+        self.assertEqual(json.loads(body)["status"], "accepted")
+
 
 @unittest.skipUnless(
     os.getenv("RUN_LOOPBACK_INTEGRATION") == "1",
@@ -230,6 +408,18 @@ class CaptureHttpIntegrationTests(unittest.TestCase):
 
         try:
             client = httpx.Client(trust_env=False, timeout=1)
+            pending_headers = {
+                "Authorization": f"Bearer {token}",
+                "X-Learning-Analysis-Extension-Id": extension_id,
+            }
+            pending = client.get(
+                f"http://127.0.0.1:{port}/pending",
+                params={"url": "https://mp.weixin.qq.com/s/a"},
+                headers=pending_headers,
+            )
+            self.assertEqual(pending.status_code, 404)
+            self.assertEqual(pending.json(), {"status": "NO_PENDING"})
+
             waiter = threading.Thread(target=lambda: result.update({
                 "response": client.get(
                     f"http://127.0.0.1:{port}/capture",
@@ -243,11 +433,18 @@ class CaptureHttpIntegrationTests(unittest.TestCase):
             }))
             waiter.start()
             time.sleep(0.03)
+            pending = client.get(
+                f"http://127.0.0.1:{port}/pending",
+                params={"url": "https://mp.weixin.qq.com/s/a"},
+                headers=pending_headers,
+            )
+            self.assertEqual(pending.status_code, 200)
+            self.assertEqual(pending.json(), {"status": "PENDING_READY"})
             submitted = client.post(
                 f"http://127.0.0.1:{port}/capture",
                 headers={
-                    "Origin": f"chrome-extension://{extension_id}",
                     "Authorization": f"Bearer {token}",
+                    "X-Learning-Analysis-Extension-Id": extension_id,
                 },
                 json={
                     "source_url": "https://mp.weixin.qq.com/s/a",
