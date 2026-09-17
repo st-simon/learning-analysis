@@ -34,19 +34,48 @@ async def gate0_transport_probe() -> dict:
         "persistent_write": False,
     }
 
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False))
+async def gate1a_wait_probe(delay_seconds: int) -> dict:
+    """Wait exactly 5 or 25 seconds, then return a fixed no-network fixture."""
+    if delay_seconds not in (5, 25):
+        return {
+            "status": "error",
+            "error_code": "INVALID_PROBE_DELAY",
+            "allowed_delay_seconds": [5, 25],
+            "network_used": False,
+            "persistent_write": False,
+        }
+    started = time.monotonic()
+    await asyncio.sleep(delay_seconds)
+    return {
+        "status": "ok",
+        "probe_id": "gate1a-wait-v1",
+        "delay_seconds": delay_seconds,
+        "elapsed_ms": round((time.monotonic() - started) * 1000),
+        "fixture": "local-mcp-no-network",
+        "network_used": False,
+        "persistent_write": False,
+    }
+
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False))
 async def read_rendered_url(url: str) -> dict:
-    """Return an article already captured from a rendered WeChat tab; never fetch the article."""
+    """Wait up to 25 seconds for one authorized capture of the rendered WeChat tab."""
     request_id = uuid.uuid4().hex
     started = time.monotonic()
     try:
-        async with asyncio.timeout(8):
-            result = await asyncio.to_thread(fetch_capture, url)
+        async with asyncio.timeout(29):
+            result = await asyncio.to_thread(
+                fetch_capture,
+                url,
+                request_id=request_id,
+                wait_seconds=25,
+            )
     except CaptureError as exc:
         result = {
             "status": "error",
             "error_code": exc.code,
-            "message": "No matching rendered capture is available. Open the article and authorize the local browser capture once.",
+            "message": "The matching rendered capture was not received in the 25-second authorization window.",
         }
     except TimeoutError:
         result = {

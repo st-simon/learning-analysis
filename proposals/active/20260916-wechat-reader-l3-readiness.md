@@ -5,18 +5,18 @@
 - Impact level: high
 - Impact triggers: architecture, trust-boundary, auth-secrets, deployment-infrastructure, sensitive-data, migration-replacement, route-invalidating-uncertainty
 - Proposal readiness: required
-- Status: proposed
+- Status: blocked
 - Approval scope: spike-only
-- Core gate: pending
+- Core gate: passed
 - Cost gate: not-applicable
 - Contradiction gate: clear
 - Outcome confirmation: confirmed
-- Confirmation source: 用户于 2026-09-15 明确 L1/L2/L3 分层需求和禁止手工搬运正文；2026-09-16 批准 Gate 0 后续 proposal
+- Confirmation source: 用户于 2026-09-15 明确 L1/L2/L3 分层需求和禁止手工搬运正文；2026-09-16 批准 Gate 0 后续 proposal；2026-09-17 明确批准执行 Gate 1A，并批准只刷新现有应用工具快照、启用新增只读fixture工具的窄范围修订
 - Assumption freshness gate: recheck-required
 - External evidence gate: passed
 - Rollback gate: ready
 - Implementation verification: stage-gated
-- 更新日期：2026-09-16
+- 更新日期：2026-09-17
 - 项目：learning-analysis
 - 分支：codex/gce-reader-implementation（历史名称；本提案不创建或切换分支）
 - Security/Ops：required；涉及浏览器页面内容、本机常驻进程、运行密钥、远程 MCP 和安装/卸载
@@ -144,15 +144,15 @@ ChatGPT App/Web
 
 | ID | Claim | Consequence if false | Evidence state | Volatility | Verified at | Recheck by / trigger | Cheapest falsification probe | Stop condition | Affected route |
 |---|---|---|---|---|---|---|---|---|---|
-| H6 | App/Web 的同一次工具调用至少提供25秒有效等待窗口，并能在一次浏览器授权后返回 | 平台提前终止，URL 后仍需第二次消息，核心体验不成立 | `unverified` | volatile | not-run | Gate 1A 批准后、实现前；Platform或tunnel-client变化时 | App/Web 各运行5秒控制和25秒无正文 fixture；首个失败即停止。双端均通过后，各用1次真实文章并要求用户在20秒内授权 | 任一客户端超时、断开、要求第二次调用，或25秒fixture失败；不重试 | A/L3 |
-| H8 | 扩展 ID 和每安装令牌可稳定配对，其他 Origin/令牌被拒绝 | loopback 可被非配对来源提交 | `unverified` | stable | not-run | manifest key、安装路径或扩展打包方式变化时 | 固定公开 manifest key；重载两次核对 ID；正确/错误 Origin 与 token 契约测试 | 身份漂移或未授权提交被接受 | A/L3 |
+| H6 | App/Web 的同一次工具调用至少提供25秒有效等待窗口，并能在一次浏览器授权后返回 | 平台提前终止，URL 后仍需第二次消息，核心体验不成立 | `falsified` for current implementation | volatile | 2026-09-17 | 协调器/扩展诊断与时序修订获新批准后 | App/Web 各运行5秒控制和25秒无正文 fixture；首个失败即停止。双端均通过后，各用1次真实文章并要求用户在20秒内授权 | App真实文章等待约25062ms后`CAPTURE_TIMEOUT`；按规则停止且不重试 | A/L3 |
+| H8 | 扩展 ID 和每安装令牌可稳定配对，其他 Origin/令牌被拒绝 | loopback 可被非配对来源提交 | `verified` | stable | 2026-09-17 | manifest key、安装路径或扩展打包方式变化时 | 固定公开 manifest key；重载两次核对 ID；正确/错误 Origin 与 token 契约测试 | 身份漂移或未授权提交被接受 | A/L3 |
 
 ## Spike Evidence
 
 | Probe ID | Assumption ID | Environment | Expected falsifier | Observed result | Evidence path | Decision |
 |---|---|---|---|---|---|---|
-| P6 | H6 | ChatGPT App/Web、Platform tunnel、5秒/25秒 fixture + 最多1篇文章 | 25秒等待调用断开、超时或不能自动返回 | not-run | `docs/l3-readiness-evidence.md#p6` | `not-run` |
-| P8 | H8 | unpacked 扩展、loopback 契约 | ID漂移或错误凭据可提交 | not-run | `docs/l3-readiness-evidence.md#p8` | `not-run` |
+| P6 | H6 | ChatGPT App/Web、Platform tunnel、5秒/25秒 fixture + 最多1篇文章 | 25秒等待调用断开、超时或不能自动返回 | App/Web fixture矩阵通过；App真实文章调用进入25秒等待，但无捕获被协调器接受，约25062ms后`CAPTURE_TIMEOUT` | `docs/l3-readiness-evidence.md#p6` | `failed`；Web真实文章未运行 |
+| P8 | H8 | unpacked 扩展、loopback 契约 | ID漂移或错误凭据可提交 | 两次Chrome重载后ID不变；错误Origin/令牌均被拒绝；原生loopback集成通过 | `docs/l3-readiness-evidence.md#p8` | `passed` |
 
 ## External Claims Evidence
 
@@ -167,6 +167,7 @@ ChatGPT App/Web
 | X5 | 登录用户级后台进程可由LaunchAgent管理启动和恢复 | volatile | [Apple Service Management](https://developer.apple.com/documentation/servicemanagement) | 2026-09-16 | macOS目标版本或打包方式变化时 |
 | X6 | 官方tunnel-client通过出站长轮询接收命令并回传MCP结果 | volatile | [OpenAI tunnel protocol](https://github.com/openai/tunnel-client/blob/master/docs/protocol.md) | 2026-09-16 | tunnel-client、MCP SDK或协议变化时 |
 | X7 | 单次命令可携带动态 `response_timeout`；该期限覆盖MCP连接、读写和结果回传，progress通知不会重置；官方没有公布当前ChatGPT固定秒数 | volatile | [OpenAI tunnel protocol](https://github.com/openai/tunnel-client/blob/master/docs/protocol.md) | 2026-09-16 | Platform或tunnel-client协议变化时；Gate 1A必须实测所需等待窗口，不能把文档示例值当作产品上限 |
+| X8 | 已批准MCP应用使用冻结的工具与输入快照；服务端新增工具不会自动启用，需在应用设置刷新操作 | volatile | [OpenAI Developer mode and MCP apps in ChatGPT](https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps-in-chatgpt) | 2026-09-17 | 应用发布状态、Workspace计划或ChatGPT应用管理界面变化时 |
 
 ## Recommended Route
 
@@ -185,7 +186,7 @@ Gate 1A 只构建隔离 fixture，不形成正式产品。Gate 1A 通过后，Ga
 - Data limit: fixture 优先；最多复用1篇用户已提供的公开文章，不保存正文或完整URL。
 - Retry limit: P6 在 App/Web 各运行一次5秒控制和一次25秒 fixture，任一步失败即停止该客户端后续探针；双端均通过后，真实文章各一次。P8 最多两次重载。失败后记录，不重复点击或重启。
 - Change limit: Gate 1A 只允许隔离的 coordinator spike、测试扩展、证据文档和必要的 `.env` 权限修复；不安装 LaunchAgent。
-- External-state limit: 不调用 Cloudflare Worker/Jina，不改正式插件连接，不删除 OAuth、Secret、Worker 或容器。
+- External-state limit: 不调用 Cloudflare Worker/Jina，不删除 OAuth、Secret、Worker 或容器。经用户于2026-09-17追加批准，只允许刷新现有应用的工具快照并启用新增只读`gate1a_wait_probe`；不得修改endpoint、认证、其他权限或生产路由。
 - Exit condition: 任一安全边界触发、H6/H8失败、出现未批准持久化/费用，或达到时间与重试上限时立即停止。Gate 1A 通过后也必须停止并汇报，不得顺带执行 Gate 1B。
 
 ## Implementation Gates
@@ -270,6 +271,10 @@ Gate 1A 只构建隔离 fixture，不形成正式产品。Gate 1A 通过后，Ga
 `proposed -> approved (Gate 1A spike-only) -> in_progress -> verified -> archived`
 
 - 用户批准后才执行 Gate 1A。
+- 2026-09-17：P6在执行前被ChatGPT冻结工具快照阻塞；正式插件连接修改不在当前批准范围，H6保持`unverified`。
+- 2026-09-17：用户批准窄范围修订，允许刷新现有应用工具快照并启用新增只读fixture工具；proposal恢复`in_progress`，P6仍从App 5秒控制继续。
+- 2026-09-17：App/Web fixture矩阵通过，但App真实文章探针因`CAPTURE_TIMEOUT`失败；按无重试规则转`blocked`，不运行Web真实文章或Gate 1B。
+- 失败后用户确认扩展徽标为红色`ERR`。代码审查发现扩展POST依赖MCP先登记pending request，而UI没有“pending已就绪”信号或一次点击后的有界等待，存在确定性的点击/pending竞态；精确子错误因扩展统一吞并为`ERR`而不可观测。任何重测必须另行批准，并先修复竞态与脱敏错误分类。
 - 任一承重假设失败：转 `blocked`，不得进入 full implementation。
 - P6/P8 全部通过：本提案转 `verified`，另建或修订 Gate 1B proposal 并等待明确批准。
 - 只有 Gate 1B 也通过后，才可另建 L3 `full-implementation` proposal。

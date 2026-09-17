@@ -3,6 +3,7 @@
   "name": "Learning Analysis Gate 0 Capture",
   "version": "0.1.0",
   "description": "Captures the already-rendered WeChat article DOM after one explicit toolbar action.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxC0lP+viRoLsV7u90LpV80i/X85bzQJA+wbQ9NiD53MYylRY+MflxtUb2upHH25bYEo8G9eVU+OLugmq3PtTyOT4qFBzzMc+N/0UuAJ0sorePgxO/zktQXn84VSH8NULc0ezI580qUUSQ+RpOwMJjkD7x14Zpq1um35DYS9M/C/k6FEvSSFpFf6I64trfLy5X8zbjS1frDRNKfhO9iOR5cVWN8cHKij6cxv4xopaTFqyriJ66PY3DyGwHh1F2fiIP1RWX3AO1eRw3L1VdSJoxNNE3SN65puf2TN2t6G5Ojv3YhuEcEVqLjPBgI/8574HlPvgPCtgEtAQNIkteJ2gKQIDAQAB",
   "permissions": ["activeTab", "scripting"],
   "host_permissions": ["http://127.0.0.1:18431/*"],
   "background": {"service_worker": "service_worker.js"},

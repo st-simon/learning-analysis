@@ -5,6 +5,7 @@
 /archive/
 logs/
 runtime/
+spike/browser-source-extension/install_config.js
 __pycache__/
 .DS_Store
 cloudflare/node_modules/

@@ -6,7 +6,12 @@ import secrets
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from browser_capture import CaptureApplication, DEFAULT_TOKEN_FILE, MAX_CAPTURE_CHARACTERS
+from browser_capture import (
+    CaptureApplication,
+    DEFAULT_EXTENSION_ID,
+    DEFAULT_TOKEN_FILE,
+    MAX_CAPTURE_CHARACTERS,
+)
 
 
 def load_or_create_token(path: Path) -> str:
@@ -71,7 +76,10 @@ def main() -> None:
     parser.add_argument("--token-file", type=Path, default=DEFAULT_TOKEN_FILE)
     args = parser.parse_args()
     token = load_or_create_token(args.token_file)
-    server = ThreadingHTTPServer(("127.0.0.1", 18431), make_handler(CaptureApplication(token)))
+    server = ThreadingHTTPServer(
+        ("127.0.0.1", 18431),
+        make_handler(CaptureApplication(token, DEFAULT_EXTENSION_ID)),
+    )
     print("browser capture bridge listening on http://127.0.0.1:18431 (memory-only captures)", flush=True)
     try:
         server.serve_forever()

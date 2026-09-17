@@ -1,3 +1,5 @@
+importScripts("install_config.js");
+
 function extractRenderedArticle() {
   const sourceUrl = new URL(window.location.href);
   sourceUrl.hash = "";
@@ -68,7 +70,10 @@ chrome.action.onClicked.addListener(async (tab) => {
     const [{result}] = await chrome.scripting.executeScript({target: {tabId: tab.id}, func: extractRenderedArticle});
     const response = await fetch("http://127.0.0.1:18431/capture", {
       method: "POST",
-      headers: {"Content-Type": "application/json"},
+      headers: {
+        "Authorization": `Bearer ${globalThis.GATE1A_INSTALL_TOKEN}`,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify(result),
     });
     if (!response.ok) throw new Error(`BRIDGE_${response.status}`);

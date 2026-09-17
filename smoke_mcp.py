@@ -8,10 +8,12 @@ async def main():
     async with stdio_client(p) as (r,w):
         async with ClientSession(r,w) as s:
             await s.initialize(); tools=await s.list_tools(); names={x.name for x in tools.tools}
-            assert names=={"read_url","read_rendered_url","gate0_transport_probe"}
+            assert names=={"read_url","read_rendered_url","gate0_transport_probe","gate1a_wait_probe"}
             assert all(x.annotations.readOnlyHint for x in tools.tools)
             probe=await s.call_tool("gate0_transport_probe",{})
             assert "gate0-transport-v1" in str(probe) and "network_used" in str(probe)
+            wait_probe=await s.call_tool("gate1a_wait_probe",{"delay_seconds":0})
+            assert "INVALID_PROBE_DELAY" in str(wait_probe)
             result=await s.call_tool("read_url",{"url":"file:///etc/passwd"}); assert "could not be read" in str(result)
             rendered=await s.call_tool("read_rendered_url",{"url":"file:///etc/passwd"}); assert "INVALID_SOURCE_URL" in str(rendered)
             print("PASS MCP handshake, no-network Gate 0 probe, read-only discovery, unsafe URL rejection")
