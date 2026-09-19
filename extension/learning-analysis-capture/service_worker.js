@@ -68,7 +68,7 @@ async function submitCapture(capture) {
   const response = await fetch("http://127.0.0.1:18431/capture", {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${globalThis.GATE1A_INSTALL_TOKEN}`,
+      "Authorization": `Bearer ${globalThis.LEARNING_ANALYSIS_INSTALL_TOKEN}`,
       "X-Learning-Analysis-Extension-Id": chrome.runtime.id,
       "Content-Type": "application/json",
     },
@@ -93,7 +93,7 @@ chrome.action.onClicked.addListener(async (tab) => {
     await setBadge("WAIT", "#1a73e8");
     const sourceUrl = CaptureFlow.normalizeSourceUrl(tab.url);
     await CaptureFlow.runCaptureFlow(sourceUrl, {
-      token: globalThis.GATE1A_INSTALL_TOKEN,
+      token: globalThis.LEARNING_ANALYSIS_INSTALL_TOKEN,
       extensionId: chrome.runtime.id,
       extractFn: async () => {
         const [{result}] = await chrome.scripting.executeScript({

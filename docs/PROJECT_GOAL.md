@@ -1,6 +1,6 @@
 # Learning Analysis：项目目标
 
-更新日期：2026-09-16
+更新日期：2026-09-20
 
 ## 产品目标
 
@@ -45,19 +45,19 @@
 - 一篇 22,084 字文章已在 ChatGPT App/Web 经 Platform tunnel 各返回一次，且声明 `source_channel=rendered_dom`、`network_used=false`、`persistent_write=false`。
 - 本地 Reader 唯一探针因 Mac TUN/Fake-IP DNS 返回 `198.18.0.0/15` 合成地址而在入口安全检查阶段停止，未进入 Jina。该结果为 `inconclusive`，不能证明 Reader 或微信访问失败；它被延期且不作为当前 L3 主路线或回退。
 - Cloudflare Worker 的 OAuth/MCP 历史验证保留，但 Worker 与 Jina SaaS 路线继续冻结。
-- Gate 0 证明可行性，不证明后台生命周期、自动等待、正式配对、安装/升级或卸载已达到产品标准。
+- Gate 1A-R 与 Gate 1B 提供了承重证据；正式实现 F0-F6 已进一步验证进程内capture runtime、私有扩展/token、用户级安装、App/Web两篇当前文章、约13.4秒自然登录恢复、升级轮换、零残留卸载和最终重装。
 
 ## Gate 0 验收结果
 
-Gate 0 已于 2026-09-16 完成：H0、H2、H3a、H3b、H3c 通过；H1 为 inconclusive 并按单次上限停止。浏览器路线达到 L3 可行性门槛，但尚未获批正式实现。
+Gate 0 已于 2026-09-16 完成：H0、H2、H3a、H3b、H3c 通过；H1 为 inconclusive 并按单次上限停止。浏览器路线随后完成正式 L3 实现。
 
-下一门槛拆为两段：Gate 1A 验证同一次 App/Web 工具调用至少25秒有效等待、浏览器授权后自动返回和精确扩展配对；通过后必须停止汇报。Mac 用户级后台启动/恢复、tunnel ready 和完整卸载属于另行批准的 Gate 1B。两段全部通过后才可申请 `full-implementation`。
+Gate 1A-R 与 Gate 1B 均已于 2026-09-18 通过。独立 L3 full-implementation proposal 于 2026-09-20 获批并完成；F0-F6 全部通过，真实文章额度严格止于2篇。
 
 ## 明确延期
 
 - 完全云端、无人值守的公众号抓取；
 - 住宅代理、IP轮换、指纹伪装或验证码自动化；
-- 正式浏览器扩展、移动端分享扩展和跨设备正文中转；当前只允许经新 proposal 批准的正式化就绪 spike；
+- Chrome Web Store公开分发、移动端分享扩展和跨设备正文中转；L3仅考虑个人Mac上的私有本地扩展；
 - OCR、图表数值识别、图片托管、全文知识库；
 - 多用户、批量爬取、付费墙或需登录内容；
 - 正式替换现有插件连接。

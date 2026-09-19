@@ -2,15 +2,14 @@ import base64
 import hashlib
 import json
 import os
-import tempfile
 import threading
 import time
 import unittest
-from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
 
 import httpx
+import server as mcp_server
 
 from browser_capture import (
     CaptureApplication,
@@ -18,14 +17,18 @@ from browser_capture import (
     CaptureError,
     CaptureStore,
     DEFAULT_EXTENSION_ID,
-    capture_endpoint,
-    fetch_capture,
     normalize_capture,
 )
-from browser_capture_server import make_handler, redacted_error_event
+from browser_capture_server import redacted_error_event
+from capture_runtime import CaptureRuntime
 
 
-EXTENSION_MANIFEST = Path(__file__).resolve().parent / "spike" / "browser-source-extension" / "manifest.json"
+EXTENSION_MANIFEST = (
+    Path(__file__).resolve().parent
+    / "extension"
+    / "learning-analysis-capture"
+    / "manifest.json"
+)
 
 
 class ExtensionIdentityTests(unittest.TestCase):
@@ -191,13 +194,48 @@ class CaptureCoordinatorTests(unittest.TestCase):
         self.assertEqual(self.coordinator.wait("request-a", 0)["title"], "A")
         self.assertEqual(self.coordinator.wait("request-b", 0)["title"], "B")
 
+    def test_cancel_all_releases_every_waiter(self):
+        errors = []
+        for suffix in ("a", "b"):
+            self.coordinator.begin(
+                f"https://mp.weixin.qq.com/s/{suffix}", f"request-{suffix}"
+            )
+        waiters = [
+            threading.Thread(
+                target=lambda request_id=request_id: self._record_wait_error(
+                    request_id, errors
+                )
+            )
+            for request_id in ("request-a", "request-b")
+        ]
+        for waiter in waiters:
+            waiter.start()
+
+        self.coordinator.cancel_all()
+        for waiter in waiters:
+            waiter.join(1)
+
+        self.assertEqual(errors, ["CAPTURE_CANCELLED", "CAPTURE_CANCELLED"])
+        self.assertTrue(all(not waiter.is_alive() for waiter in waiters))
+
+    def _record_wait_error(self, request_id: str, errors: list[str]) -> None:
+        try:
+            self.coordinator.wait(request_id, 0.5)
+        except CaptureError as exc:
+            errors.append(exc.code)
+
 
 class CaptureApplicationTests(unittest.TestCase):
     def setUp(self):
         self.extension_id = "abcdefghijklmnopabcdefghijklmnop"
         self.origin = f"chrome-extension://{self.extension_id}"
         self.token = "gate1a-test-token"
-        self.app = CaptureApplication(token=self.token, extension_id=self.extension_id)
+        self.coordinator = CaptureCoordinator()
+        self.app = CaptureApplication(
+            token=self.token,
+            extension_id=self.extension_id,
+            coordinator=self.coordinator,
+        )
         self.payload = json.dumps({
             "source_url": "https://mp.weixin.qq.com/s/a",
             "title": "A",
@@ -206,14 +244,12 @@ class CaptureApplicationTests(unittest.TestCase):
         }).encode()
 
     def test_extension_can_submit_and_authorized_mcp_can_read(self):
+        self.coordinator.begin("https://mp.weixin.qq.com/s/a", "request-a")
         result = {}
         waiter = threading.Thread(
-            target=lambda: result.update({"response": self.app.handle(
-                "GET",
-                "/capture?url=https%3A%2F%2Fmp.weixin.qq.com%2Fs%2Fa&request_id=request-a&wait_seconds=0.5",
-                {"authorization": f"Bearer {self.token}"},
-                b"",
-            )})
+            target=lambda: result.update(
+                {"capture": self.coordinator.wait("request-a", 0.5)}
+            )
         )
         waiter.start()
         time.sleep(0.02)
@@ -227,9 +263,7 @@ class CaptureApplicationTests(unittest.TestCase):
         self.assertNotIn(b"body", body)
         waiter.join(1)
 
-        status, _, body = result["response"]
-        self.assertEqual(status, 200)
-        self.assertEqual(json.loads(body)["markdown"], "body")
+        self.assertEqual(result["capture"]["markdown"], "body")
 
     def test_extension_can_observe_pending_before_extracting_article(self):
         pending_target = "/pending?url=https%3A%2F%2Fmp.weixin.qq.com%2Fs%2Fa"
@@ -259,11 +293,6 @@ class CaptureApplicationTests(unittest.TestCase):
         )
         self.assertEqual(status, 403)
 
-        status, _, body = self.app.handle(
-            "GET", "/capture?url=https%3A%2F%2Fmp.weixin.qq.com%2Fs%2Fa", {}, b""
-        )
-        self.assertEqual(status, 401)
-        self.assertNotIn(b"body", body)
 
     def test_wrong_extension_or_install_token_cannot_submit(self):
         status, _, body = self.app.handle(
@@ -395,57 +424,68 @@ class CaptureApplicationTests(unittest.TestCase):
     os.getenv("RUN_LOOPBACK_INTEGRATION") == "1",
     "set RUN_LOOPBACK_INTEGRATION=1 to bind a real loopback socket",
 )
-class CaptureHttpIntegrationTests(unittest.TestCase):
-    def test_loopback_wait_is_completed_by_exact_paired_extension(self):
+class CaptureRuntimeTests(unittest.TestCase):
+    def test_stop_cancels_in_flight_capture_wait(self):
+        runtime = CaptureRuntime(token="runtime-stop-token", port=0)
+        errors = []
+        runtime.start()
+        waiter = threading.Thread(
+            target=lambda: self._record_runtime_error(runtime, errors)
+        )
+        waiter.start()
+        time.sleep(0.02)
+
+        runtime.stop()
+        waiter.join(1)
+
+        self.assertEqual(errors, ["CAPTURE_CANCELLED"])
+        self.assertFalse(waiter.is_alive())
+
+    @staticmethod
+    def _record_runtime_error(runtime: CaptureRuntime, errors: list[str]) -> None:
+        try:
+            runtime.request_capture(
+                "https://mp.weixin.qq.com/s/a",
+                request_id="runtime-stop",
+                timeout=0.5,
+            )
+        except CaptureError as exc:
+            errors.append(exc.code)
+
+    def test_shared_runtime_wait_is_completed_by_exact_loopback_extension(self):
         extension_id = "abcdefghijklmnopabcdefghijklmnop"
-        token = "gate1a-integration-token"
-        app = CaptureApplication(token=token, extension_id=extension_id)
-        server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(app))
-        server_thread = threading.Thread(target=server.serve_forever)
-        server_thread.start()
-        port = server.server_address[1]
+        token = "runtime-integration-token"
+        runtime = CaptureRuntime(token=token, extension_id=extension_id, port=0)
         result = {}
+        runtime.start()
+        waiter = threading.Thread(target=lambda: result.update({
+            "capture": runtime.request_capture(
+                "https://mp.weixin.qq.com/s/a",
+                request_id="runtime-a",
+                timeout=0.5,
+            )
+        }))
+        waiter.start()
 
         try:
             client = httpx.Client(trust_env=False, timeout=1)
-            pending_headers = {
+            headers = {
                 "Authorization": f"Bearer {token}",
                 "X-Learning-Analysis-Extension-Id": extension_id,
             }
-            pending = client.get(
-                f"http://127.0.0.1:{port}/pending",
-                params={"url": "https://mp.weixin.qq.com/s/a"},
-                headers=pending_headers,
-            )
-            self.assertEqual(pending.status_code, 404)
-            self.assertEqual(pending.json(), {"status": "NO_PENDING"})
-
-            waiter = threading.Thread(target=lambda: result.update({
-                "response": client.get(
-                    f"http://127.0.0.1:{port}/capture",
-                    params={
-                        "url": "https://mp.weixin.qq.com/s/a",
-                        "request_id": "integration-a",
-                        "wait_seconds": "0.5",
-                    },
-                    headers={"Authorization": f"Bearer {token}"},
+            deadline = time.monotonic() + 0.5
+            while True:
+                pending = client.get(
+                    f"{runtime.base_url}/pending",
+                    params={"url": "https://mp.weixin.qq.com/s/a"},
+                    headers=headers,
                 )
-            }))
-            waiter.start()
-            time.sleep(0.03)
-            pending = client.get(
-                f"http://127.0.0.1:{port}/pending",
-                params={"url": "https://mp.weixin.qq.com/s/a"},
-                headers=pending_headers,
-            )
-            self.assertEqual(pending.status_code, 200)
-            self.assertEqual(pending.json(), {"status": "PENDING_READY"})
+                if pending.status_code == 200 or time.monotonic() >= deadline:
+                    break
+                time.sleep(0.01)
             submitted = client.post(
-                f"http://127.0.0.1:{port}/capture",
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "X-Learning-Analysis-Extension-Id": extension_id,
-                },
+                f"{runtime.base_url}/capture",
+                headers=headers,
                 json={
                     "source_url": "https://mp.weixin.qq.com/s/a",
                     "title": "A",
@@ -455,39 +495,30 @@ class CaptureHttpIntegrationTests(unittest.TestCase):
             )
             waiter.join(1)
 
+            self.assertEqual(pending.json(), {"status": "PENDING_READY"})
             self.assertEqual(submitted.status_code, 202)
             self.assertFalse(waiter.is_alive())
-            self.assertEqual(result["response"].status_code, 200)
-            self.assertEqual(result["response"].json()["title"], "A")
+            self.assertEqual(result["capture"]["title"], "A")
+            self.assertEqual(runtime.health(), {"status": "ok", "ready": True})
         finally:
             client.close()
-            server.shutdown()
-            server.server_close()
-            server_thread.join(1)
+            runtime.stop()
+
+        self.assertEqual(runtime.health(), {"status": "stopped", "ready": False})
 
 
-class CaptureClientTests(unittest.TestCase):
-    def test_endpoint_is_fixed_to_loopback(self):
-        self.assertEqual(capture_endpoint(), "http://127.0.0.1:18431/capture")
-        with patch.dict("os.environ", {"BROWSER_CAPTURE_ENDPOINT": "https://example.com/capture"}):
-            with self.assertRaises(CaptureError):
-                capture_endpoint()
+class CaptureToolTests(unittest.IsolatedAsyncioTestCase):
+    async def test_rendered_tool_requests_capture_directly_from_shared_runtime(self):
+        class FakeRuntime:
+            def __init__(self):
+                self.calls = []
 
-    def test_fetch_uses_local_token_and_returns_capture(self):
-        with tempfile.TemporaryDirectory() as directory:
-            token_file = Path(directory) / "token"
-            token_file.write_text("secret-token", encoding="utf-8")
-            token_file.chmod(0o600)
-
-            def handler(request):
-                self.assertEqual(request.headers["authorization"], "Bearer secret-token")
-                self.assertEqual(request.url.host, "127.0.0.1")
-                self.assertTrue(request.url.params["request_id"])
-                self.assertEqual(request.url.params["wait_seconds"], "0")
-                return httpx.Response(200, json={
+            def request_capture(self, source_url, *, request_id, timeout):
+                self.calls.append((source_url, request_id, timeout))
+                return {
                     "status": "ok",
                     "source_channel": "rendered_dom",
-                    "source_url": "https://mp.weixin.qq.com/s/a",
+                    "source_url": source_url,
                     "title": "A",
                     "markdown": "body",
                     "characters": 4,
@@ -495,24 +526,19 @@ class CaptureClientTests(unittest.TestCase):
                     "persistent_write": False,
                     "warnings": [],
                     "limitations": "Rendered DOM only",
-                })
+                }
 
-            with httpx.Client(transport=httpx.MockTransport(handler)) as client:
-                result = fetch_capture(
-                    "https://mp.weixin.qq.com/s/a", client=client, token_file=token_file
-                )
-            self.assertEqual(result["markdown"], "body")
-
-    def test_fetch_classifies_missing_capture(self):
-        with httpx.Client(
-            transport=httpx.MockTransport(
-                lambda request: httpx.Response(404, json={"error_code": "CAPTURE_NOT_FOUND"})
+        runtime = FakeRuntime()
+        with patch.object(mcp_server, "_capture_runtime", runtime):
+            result = await mcp_server.read_rendered_url(
+                "https://mp.weixin.qq.com/s/a"
             )
-        ) as client:
-            with self.assertRaisesRegex(CaptureError, "CAPTURE_NOT_FOUND"):
-                fetch_capture(
-                    "https://mp.weixin.qq.com/s/a", client=client, token="secret-token"
-                )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["title"], "A")
+        self.assertEqual(len(runtime.calls), 1)
+        self.assertEqual(runtime.calls[0][0], "https://mp.weixin.qq.com/s/a")
+        self.assertEqual(runtime.calls[0][2], 25)
 
 
 if __name__ == "__main__":

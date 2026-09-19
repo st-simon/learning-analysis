@@ -8,11 +8,14 @@ import time
 import uuid
 from pathlib import Path
 
-from browser_capture import CaptureError, fetch_capture
+from browser_capture import CaptureError, DEFAULT_TOKEN_FILE
+from browser_capture_server import load_or_create_token
+from capture_runtime import CaptureRuntime
 
 _busy = False
 REQUEST_DEADLINE = 60
 logger = logging.getLogger("learning-analysis")
+_capture_runtime: CaptureRuntime | None = None
 
 mcp = FastMCP(
     "learning-analysis",
@@ -65,11 +68,14 @@ async def read_rendered_url(url: str) -> dict:
     started = time.monotonic()
     try:
         async with asyncio.timeout(29):
+            runtime = _capture_runtime
+            if runtime is None:
+                raise CaptureError("CAPTURE_BRIDGE_UNAVAILABLE")
             result = await asyncio.to_thread(
-                fetch_capture,
+                runtime.request_capture,
                 url,
                 request_id=request_id,
-                wait_seconds=25,
+                timeout=25,
             )
     except CaptureError as exc:
         result = {
@@ -131,4 +137,17 @@ async def read_url(url: str) -> dict:
         result.setdefault("message", "Article could not be read. No automatic retry.")
     return result
 
-if __name__ == "__main__": mcp.run(transport="stdio")
+def main() -> None:
+    global _capture_runtime
+    token = load_or_create_token(DEFAULT_TOKEN_FILE)
+    runtime = CaptureRuntime(token=token)
+    _capture_runtime = runtime
+    try:
+        with runtime:
+            mcp.run(transport="stdio")
+    finally:
+        _capture_runtime = None
+
+
+if __name__ == "__main__":
+    main()

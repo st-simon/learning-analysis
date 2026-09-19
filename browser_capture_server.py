@@ -1,18 +1,15 @@
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import secrets
 import sys
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from browser_capture import (
     CaptureApplication,
-    DEFAULT_EXTENSION_ID,
-    DEFAULT_TOKEN_FILE,
     MAX_CAPTURE_CHARACTERS,
 )
 
@@ -130,25 +127,3 @@ def make_handler(app: CaptureApplication):
             return
 
     return Handler
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Gate 0 rendered-DOM capture bridge")
-    parser.add_argument("--token-file", type=Path, default=DEFAULT_TOKEN_FILE)
-    args = parser.parse_args()
-    token = load_or_create_token(args.token_file)
-    server = ThreadingHTTPServer(
-        ("127.0.0.1", 18431),
-        make_handler(CaptureApplication(token, DEFAULT_EXTENSION_ID)),
-    )
-    print("browser capture bridge listening on http://127.0.0.1:18431 (memory-only captures)", flush=True)
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        server.server_close()
-
-
-if __name__ == "__main__":
-    main()

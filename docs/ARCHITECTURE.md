@@ -1,6 +1,6 @@
 # Learning Analysis：混合读取架构
 
-更新日期：2026-09-16；状态：Gate 0 已验证；L3 正式化就绪 proposal 待审批，尚未批准 full implementation、部署或正式切换。
+更新日期：2026-09-20；状态：L3 full implementation 已完成；F0-F6 全部通过并 verified。
 
 ## 产品优先级
 
@@ -8,7 +8,7 @@
 
 ## 当前设计压力
 
-`read_url` 的调用方需要的是可信文章文档，不应知道浏览器提取、内存协调、进程生命周期或 tunnel 细节。Gate 0 证明这些层可以连通，但当前 spike 仍由两个手工进程和一个临时扩展组成，且调用必须发生在捕获之后；正式化压力是把复杂度收进一个可监督、可配对、可等待的本机接口。
+调用方需要的是可信文章文档，不应知道内存协调、进程生命周期或 tunnel 细节。正式实现已把 capture runtime 收进 MCP 进程，由一个用户级 LaunchAgent 监督 tunnel/MCP；Chrome 只承担一次明确的页面授权与 DOM 提交。
 
 ## 推荐 seam 与接口
 
@@ -24,11 +24,10 @@ ArticleResult
   request_id, source_url, title, markdown, characters, warnings, limitations
 ```
 
-对外只保留一个用户意图：
+当前已验证的公众号工具路径：
 
-- `read_url(url)`：建立有界内存请求，等待用户最多一次浏览器授权并返回 `ArticleResult`。若等待或来源失败，返回明确错误，不要求用户提交正文。
-
-`read_rendered_url` 仅作为迁移期诊断接口；正式插件默认不要求调用方理解或选择它。
+- `read_rendered_url(url)`：建立有界内存请求，等待用户最多一次浏览器授权并返回结果。若等待或来源失败，返回明确错误，不要求用户提交正文。
+- `read_url` 属于冻结的 Reader 历史路径，不得作为公众号默认调用或自动回退。
 
 调用方不能指定代理、Cookie、任意 header、抓取引擎或供应商。通道选择属于服务内部策略。
 
@@ -112,6 +111,12 @@ Gate 0 已完成以下证据：
 
 在 full implementation 前分两段验证承重条件。Gate 1A 已验证 App/Web 同次调用等待、一次授权后自动返回和精确扩展配对。Gate 1B 已在另行批准后验证 disposable 用户级 LaunchAgent：初始启动、一次受监督恢复、恢复前后 App 固定探针和完整卸载均通过；该验证没有让 capture bridge 常驻，也没有验证自然登录/重启。
 
+## Implemented L3 formal architecture
+
+已批准实现把 capture coordinator、loopback认证adapter和生命周期收敛为MCP进程内的 `CaptureRuntime`。tunnel-client由单一用户LaunchAgent监督并启动stdio MCP；MCP直接在同一协调器登记/等待，Chrome扩展只通过loopback执行pending检查和一次DOM提交。该实现消除了第二个手工bridge进程、双LaunchAgent顺序和跨进程token协调，同时保留已验证的 `activeTab`、稳定扩展ID、内存态正文和Platform tunnel。
+
+F0-F6 已通过自动、loopback、本机生命周期、App/Web、两篇当前文章、自然登录、升级/重装、完整卸载和最终正式安装验收。
+
 ## 当前条件分支
 
 - 浏览器自动提取与App/Web传输已通过：路线达到L3可行性门槛。
@@ -122,7 +127,7 @@ Gate 0 已完成以下证据：
 ## 开放问题
 
 - 用户更重视 URL 直达，还是跨设备使用；二者可能需要不同的 Phase 2。
-- 浏览器自动提取正式版采用书签脚本、扩展还是原生消息桥；Gate 0 后再选，人工复制不在候选内。
+- L2/L1是否改用Native Messaging或Chrome Web Store；L3已推荐私有Manifest V3 unpacked扩展。
 - 文章正文是否允许短期经过 Cloudflare；当前默认答案为否。
 - 现有 Cloudflare Worker、GitHub OAuth App 和 Jina key何时停用或撤销；需要单独批准。
 - Python 应用依赖是否在实现前改为可复现 lock；不得与 Gate 0 逻辑改动混做。

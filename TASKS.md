@@ -1,8 +1,8 @@
 # Status
 
-## Current: L3 formalization readiness proposal
+## Current: L3 full implementation proposal
 
-Checkpoint: Gate 1A-R and disposable Gate 1B verified on 2026-09-18. Gate 1B runtime was fully removed; full implementation and production switch remain unauthorized.
+Checkpoint: Gate 1A-R and disposable Gate 1B verified on 2026-09-18. The independent L3 full-implementation proposal was approved and completed on 2026-09-20; F0-F6 passed and the production L3 installation is verified.
 
 - [x] Gate 0: identify local Reader boundary.
 - [x] Gate 0: extract 3/3 real articles from rendered Chrome DOM.
@@ -16,7 +16,15 @@ Checkpoint: Gate 1A-R and disposable Gate 1B verified on 2026-09-18. Gate 1B run
 - [x] Stop after Gate 1A-R, clean temporary state, and record verified evidence.
 - [x] Obtain separate approval for Gate 1B P7/P9 lifecycle and recovery checks.
 - [x] Gate 1B: verify user-domain bootstrap, secret-safe wrapper, one kill/recovery, fixed App probes and complete uninstall.
-- [ ] Stop and submit a separate L3 full-implementation proposal only if both Gate 1A and Gate 1B pass.
+- [x] Stop and submit a separate L3 full-implementation proposal only after both Gate 1A and Gate 1B pass.
+- [x] Obtain explicit approval for `20260918-wechat-reader-l3-full-implementation` before implementation.
+- [x] F0: freeze and verify the existing Python/Node/MCP baseline with no runtime residue.
+- [x] F1: embed the capture runtime in the MCP process and remove the MCP self-HTTP path.
+- [x] F2: install and verify the formal user LaunchAgent, private extension/token, bounded doctor and log boundary.
+- [x] F3: load the generated private extension, pass fixed App/Web probes, then validate current article 1.
+- [x] F4: after explicit timing confirmation, verify natural login/restart and current article 2 in Web.
+- [x] F5: verify upgrade/token rotation and complete uninstall with zero residue.
+- [x] F6: perform the final formal install and close the evidence set.
 
 ## Completed: hybrid source-gated Gate 0
 

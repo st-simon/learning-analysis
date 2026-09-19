@@ -3,21 +3,20 @@ from __future__ import annotations
 import threading
 import hmac
 import json
-import os
 import re
 import time
-import uuid
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-import httpx
-
-
 MAX_CAPTURE_CHARACTERS = 4_000_000
-DEFAULT_CAPTURE_ENDPOINT = "http://127.0.0.1:18431/capture"
-DEFAULT_TOKEN_FILE = Path(__file__).resolve().parent / "runtime" / "browser-capture.token"
+DEFAULT_TOKEN_FILE = (
+    Path(__file__).resolve().parent
+    / "runtime"
+    / "learning-analysis"
+    / "browser-capture.token"
+)
 DEFAULT_EXTENSION_ID = "bpannmkojgebmphkkngpnhkfcgfpnbhn"
 MAX_CAPTURE_WAIT_SECONDS = 30.0
 EXTENSION_ID_PATTERN = re.compile(r"[a-p]{32}")
@@ -171,6 +170,12 @@ class CaptureCoordinator:
             pending.cancelled = True
             self._condition.notify_all()
 
+    def cancel_all(self) -> None:
+        with self._condition:
+            for pending in self._pending.values():
+                pending.cancelled = True
+            self._condition.notify_all()
+
     def _remove(self, request_id: str, source_url: str) -> None:
         self._pending.pop(request_id, None)
         if self._request_by_url.get(source_url) == request_id:
@@ -268,18 +273,6 @@ class CaptureApplication:
                 if origin:
                     response_headers["Access-Control-Allow-Origin"] = origin
                 return status, response_headers, response_body
-            if method == "GET" and parsed.path == "/capture":
-                if not self._authorized(headers):
-                    return self._json(401, {"status": "error", "error_code": "UNAUTHORIZED"})
-                values = parse_qs(parsed.query, strict_parsing=True)
-                source_url = values.get("url", [None])[0]
-                request_id = values.get("request_id", [None])[0]
-                try:
-                    wait_seconds = float(values.get("wait_seconds", ["0"])[0])
-                except (TypeError, ValueError):
-                    raise CaptureError("INVALID_WAIT_SECONDS")
-                self._coordinator.begin(source_url, request_id)
-                return self._json(200, self._coordinator.wait(request_id, wait_seconds))
         except (CaptureError, json.JSONDecodeError, ValueError) as exc:
             code = exc.code if isinstance(exc, CaptureError) else "INVALID_CAPTURE"
             status = {
@@ -292,78 +285,3 @@ class CaptureApplication:
             }.get(code, 400)
             return self._json(status, {"status": "error", "error_code": code})
         return self._json(404, {"status": "error", "error_code": "NOT_FOUND"})
-
-
-def capture_endpoint() -> str:
-    value = os.getenv("BROWSER_CAPTURE_ENDPOINT", DEFAULT_CAPTURE_ENDPOINT)
-    parsed = urlsplit(value)
-    if (
-        parsed.scheme != "http"
-        or parsed.hostname != "127.0.0.1"
-        or parsed.port != 18431
-        or parsed.path != "/capture"
-        or parsed.username
-        or parsed.password
-        or parsed.query
-        or parsed.fragment
-    ):
-        raise CaptureError("INVALID_CAPTURE_CONFIGURATION")
-    return value
-
-
-def _read_token(token_file: Path) -> str:
-    try:
-        if token_file.stat().st_mode & 0o077:
-            raise CaptureError("INSECURE_CAPTURE_TOKEN")
-        token = token_file.read_text(encoding="utf-8").strip()
-    except OSError as exc:
-        raise CaptureError("CAPTURE_BRIDGE_UNAVAILABLE") from exc
-    if not token:
-        raise CaptureError("CAPTURE_BRIDGE_UNAVAILABLE")
-    return token
-
-
-def fetch_capture(
-    source_url: str,
-    *,
-    client: httpx.Client | None = None,
-    token: str | None = None,
-    token_file: Path = DEFAULT_TOKEN_FILE,
-    request_id: str | None = None,
-    wait_seconds: float = 0,
-) -> dict:
-    _validate_source_url(source_url)
-    bearer = token or _read_token(token_file)
-    own_client = client is None
-    if wait_seconds < 0 or wait_seconds > MAX_CAPTURE_WAIT_SECONDS:
-        raise CaptureError("INVALID_WAIT_SECONDS")
-    request_id = request_id or uuid.uuid4().hex
-    client = client or httpx.Client(
-        trust_env=False,
-        timeout=httpx.Timeout(wait_seconds + 3, connect=1),
-    )
-    try:
-        response = client.get(
-            capture_endpoint(),
-            params={
-                "url": source_url,
-                "request_id": request_id,
-                "wait_seconds": str(wait_seconds),
-            },
-            headers={"Authorization": f"Bearer {bearer}", "Accept": "application/json"},
-        )
-        if response.status_code == 404:
-            raise CaptureError("CAPTURE_NOT_FOUND")
-        if response.status_code == 401:
-            raise CaptureError("CAPTURE_UNAUTHORIZED")
-        if response.status_code in (408, 409):
-            raise CaptureError(response.json().get("error_code", "CAPTURE_BRIDGE_UNAVAILABLE"))
-        response.raise_for_status()
-        return normalize_capture(response.json())
-    except CaptureError:
-        raise
-    except (httpx.HTTPError, json.JSONDecodeError, ValueError) as exc:
-        raise CaptureError("CAPTURE_BRIDGE_UNAVAILABLE") from exc
-    finally:
-        if own_client:
-            client.close()

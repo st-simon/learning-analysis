@@ -1,25 +1,62 @@
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import os
 import plistlib
 import re
 import shlex
+import shutil
 import signal
 import stat
 import subprocess
 import sys
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from browser_capture_server import load_or_create_token
 
-LABEL = "com.junxia.learning-analysis.gate1b"
+
+LABEL = "com.junxia.learning-analysis"
+RUNTIME_NAME = "learning-analysis"
+EXTENSION_SOURCE_FILES = (
+    "manifest.json",
+    "capture_flow.js",
+    "service_worker.js",
+)
+TRANSIENT_READY_ERRORS = {
+    "STARTING",
+    "MCP_UNREADY",
+    "CONTROL_PLANE_UNREADY",
+    "CAPTURE_UNREADY",
+}
 
 
 class LifecycleError(RuntimeError):
     pass
+
+
+def wait_until_ready(
+    probe,
+    *,
+    timeout_seconds: float = 45,
+    interval_seconds: float = 1,
+) -> dict:
+    if timeout_seconds < 0 or interval_seconds < 0:
+        raise LifecycleError("CONFIG_INVALID")
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        try:
+            return probe()
+        except LifecycleError as exc:
+            if str(exc) not in TRANSIENT_READY_ERRORS:
+                raise
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(min(interval_seconds, max(0, deadline - time.monotonic())))
 
 
 @dataclass(frozen=True)
@@ -29,30 +66,35 @@ class InstallationPaths:
     log_dir: Path
     stdout_log: Path
     stderr_log: Path
+    token_file: Path
+    extension_dir: Path
 
 
 def installation_paths(project_root: Path, home: Path) -> InstallationPaths:
     project_root = project_root.resolve()
     home = home.resolve()
-    log_dir = project_root / "logs" / "gate1b"
+    runtime_dir = project_root / "runtime" / RUNTIME_NAME
+    log_dir = project_root / "logs" / RUNTIME_NAME
     return InstallationPaths(
         plist=home / "Library" / "LaunchAgents" / f"{LABEL}.plist",
-        runtime_dir=project_root / "runtime" / "gate1b",
+        runtime_dir=runtime_dir,
         log_dir=log_dir,
         stdout_log=log_dir / "launchd.out.log",
         stderr_log=log_dir / "launchd.err.log",
+        token_file=runtime_dir / "browser-capture.token",
+        extension_dir=runtime_dir / "extension",
     )
 
 
 def build_plist(project_root: Path) -> bytes:
     project_root = project_root.resolve()
-    log_dir = project_root / "logs" / "gate1b"
+    log_dir = project_root / "logs" / RUNTIME_NAME
     return plistlib.dumps(
         {
             "Label": LABEL,
             "ProgramArguments": [
                 str(project_root / ".venv" / "bin" / "python"),
-                str(project_root / "gate1b_lifecycle.py"),
+                str(project_root / "learning_analysis_lifecycle.py"),
                 "run",
             ],
             "WorkingDirectory": str(project_root),
@@ -92,7 +134,7 @@ def load_control_plane_key(env_file: Path) -> str:
 
 def build_tunnel_command(project_root: Path) -> list[str]:
     project_root = project_root.resolve()
-    runtime_dir = project_root / "runtime" / "gate1b"
+    runtime_dir = project_root / "runtime" / RUNTIME_NAME
     return [
         str(project_root / "runtime" / "bin" / "tunnel-client"),
         "run",
@@ -115,6 +157,10 @@ def prepare_installation(project_root: Path, home: Path) -> Path:
     paths = installation_paths(project_root, home)
     if paths.plist.exists():
         raise LifecycleError("AGENT_ALREADY_EXISTS")
+    source_dir = project_root.resolve() / "extension" / "learning-analysis-capture"
+    missing = [name for name in EXTENSION_SOURCE_FILES if not (source_dir / name).is_file()]
+    if missing:
+        raise LifecycleError("MISSING_EXTENSION_SOURCE")
     paths.plist.parent.mkdir(parents=True, exist_ok=True)
     for directory in (paths.runtime_dir, paths.log_dir):
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -122,6 +168,19 @@ def prepare_installation(project_root: Path, home: Path) -> Path:
     for log_file in (paths.stdout_log, paths.stderr_log):
         log_file.touch(mode=0o600, exist_ok=True)
         log_file.chmod(0o600)
+    paths.extension_dir.mkdir(mode=0o700)
+    paths.extension_dir.chmod(0o700)
+    for name in EXTENSION_SOURCE_FILES:
+        destination = paths.extension_dir / name
+        shutil.copyfile(source_dir / name, destination)
+        destination.chmod(0o600)
+    token = load_or_create_token(paths.token_file)
+    config = paths.extension_dir / "install_config.js"
+    config.write_text(
+        f"globalThis.LEARNING_ANALYSIS_INSTALL_TOKEN = {json.dumps(token)};\n",
+        encoding="utf-8",
+    )
+    config.chmod(0o600)
     payload = build_plist(project_root)
     with tempfile.NamedTemporaryFile(dir=paths.plist.parent, delete=False) as temporary:
         temporary.write(payload)
@@ -139,12 +198,17 @@ def cleanup_installation(project_root: Path, home: Path) -> None:
         paths.runtime_dir / "tunnel-client.pid",
         paths.runtime_dir / "tunnel-health.url",
         paths.runtime_dir / "kill-once.marker",
+        paths.token_file,
+        paths.extension_dir / "manifest.json",
+        paths.extension_dir / "capture_flow.js",
+        paths.extension_dir / "service_worker.js",
+        paths.extension_dir / "install_config.js",
         paths.stdout_log,
         paths.stderr_log,
     )
     for owned_file in owned_files:
         owned_file.unlink(missing_ok=True)
-    for owned_dir in (paths.runtime_dir, paths.log_dir):
+    for owned_dir in (paths.extension_dir, paths.runtime_dir, paths.log_dir):
         if owned_dir.exists():
             try:
                 owned_dir.rmdir()
@@ -195,6 +259,27 @@ def _service_target() -> str:
     return f"{_domain()}/{LABEL}"
 
 
+def wait_for_service_absent(
+    *,
+    timeout_seconds: float = 10,
+    interval_seconds: float = 0.1,
+    run=subprocess.run,
+) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        result = run(
+            ["/bin/launchctl", "print", _service_target()],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        if result.returncode != 0:
+            return
+        if time.monotonic() >= deadline:
+            raise LifecycleError("SERVICE_STOP_TIMEOUT")
+        time.sleep(min(interval_seconds, max(0, deadline - time.monotonic())))
+
+
 def _run_checked(command: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         command,
@@ -238,42 +323,179 @@ def install_agent(project_root: Path, home: Path) -> Path:
     try:
         _run_checked(["/usr/bin/plutil", "-lint", str(target)])
         _run_checked(["/bin/launchctl", "bootstrap", _domain(), str(target)])
-    except (OSError, subprocess.CalledProcessError) as exc:
+        wait_until_ready(
+            lambda: status_agent(project_root, home=home),
+            timeout_seconds=45,
+        )
+    except (LifecycleError, OSError, subprocess.CalledProcessError) as exc:
+        subprocess.run(
+            ["/bin/launchctl", "bootout", _service_target()],
+            capture_output=True,
+            text=True,
+        )
+        wait_for_service_absent()
         cleanup_installation(project_root, home)
+        if isinstance(exc, LifecycleError):
+            raise
         raise LifecycleError("INSTALL_FAILED") from exc
     return target
 
 
-def status_agent(project_root: Path) -> dict:
-    launchctl = _run_checked(["/bin/launchctl", "print", _service_target()])
-    pid = parse_launchctl_pid(launchctl.stdout)
-    paths = installation_paths(project_root, Path.home())
+def _capture_is_ready() -> bool:
+    connection = http.client.HTTPConnection("127.0.0.1", 18431, timeout=1)
+    try:
+        connection.request("GET", "/healthz")
+        response = connection.getresponse()
+        response.read()
+        return response.status == 200
+    except OSError:
+        return False
+    finally:
+        connection.close()
+
+
+def _health_error(output: str) -> str:
+    normalized = output.lower()
+    if "control" in normalized:
+        return "CONTROL_PLANE_UNREADY"
+    if "mcp" in normalized:
+        return "MCP_UNREADY"
+    return "STARTING"
+
+
+def status_agent(
+    project_root: Path,
+    *,
+    home: Path | None = None,
+    run=subprocess.run,
+    capture_probe=_capture_is_ready,
+) -> dict:
+    launchctl = run(
+        ["/bin/launchctl", "print", _service_target()],
+        capture_output=True,
+        text=True,
+        timeout=3,
+    )
+    if launchctl.returncode != 0:
+        raise LifecycleError("SERVICE_ABSENT")
+    try:
+        pid = parse_launchctl_pid(launchctl.stdout)
+    except LifecycleError as exc:
+        if str(exc) == "INVALID_LAUNCHCTL_PID" and "pid =" not in launchctl.stdout:
+            raise LifecycleError("STARTING") from exc
+        raise LifecycleError("CONFIG_INVALID") from exc
+    paths = installation_paths(project_root, home or Path.home())
     try:
         pid_file = int(
             (paths.runtime_dir / "tunnel-client.pid")
             .read_text(encoding="utf-8")
             .strip()
         )
+    except FileNotFoundError as exc:
+        raise LifecycleError("STARTING") from exc
     except (OSError, ValueError) as exc:
-        raise LifecycleError("INVALID_PID_FILE") from exc
+        raise LifecycleError("CONFIG_INVALID") from exc
     if pid != pid_file:
-        raise LifecycleError("PID_MISMATCH")
-    health = _run_checked(
-        [
-            str(project_root / "runtime" / "bin" / "tunnel-client"),
-            "health",
-            "--url-file",
-            str(paths.runtime_dir / "tunnel-health.url"),
-            "--pid-file",
-            str(paths.runtime_dir / "tunnel-client.pid"),
-            "--require-control-plane-poll",
-            "--json",
-        ]
-    )
-    health_payload = json.loads(health.stdout)
+        raise LifecycleError("CONFIG_INVALID")
+    try:
+        health = run(
+            [
+                str(project_root / "runtime" / "bin" / "tunnel-client"),
+                "health",
+                "--url-file",
+                str(paths.runtime_dir / "tunnel-health.url"),
+                "--pid-file",
+                str(paths.runtime_dir / "tunnel-client.pid"),
+                "--require-control-plane-poll",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise LifecycleError("CONTROL_PLANE_UNREADY") from exc
+    if health.returncode != 0:
+        raise LifecycleError(_health_error(f"{health.stdout}\n{health.stderr}"))
+    try:
+        health_payload = json.loads(health.stdout)
+    except json.JSONDecodeError as exc:
+        raise LifecycleError("MCP_UNREADY") from exc
     if health_payload.get("result") != "ok":
-        raise LifecycleError("TUNNEL_NOT_READY")
-    return {"status": "ok", "label": LABEL, "pid": pid, "ready": True}
+        raise LifecycleError(_health_error(health.stdout))
+    if not capture_probe():
+        raise LifecycleError("CAPTURE_UNREADY")
+    return {
+        "status": "ok",
+        "label": LABEL,
+        "pid": pid,
+        "ready": True,
+        "capture_ready": True,
+    }
+
+
+def doctor_agent(
+    project_root: Path,
+    home: Path,
+    *,
+    wait_seconds: float = 0,
+    status_probe=None,
+) -> dict:
+    paths = installation_paths(project_root, home)
+    if not paths.plist.is_file():
+        raise LifecycleError("SERVICE_ABSENT")
+    try:
+        token_mode = stat.S_IMODE(paths.token_file.stat().st_mode)
+        token = paths.token_file.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise LifecycleError("CONFIG_INVALID") from exc
+    if token_mode != 0o600 or not token:
+        raise LifecycleError("CONFIG_INVALID")
+    required_extension_files = (*EXTENSION_SOURCE_FILES, "install_config.js")
+    if (
+        stat.S_IMODE(paths.extension_dir.stat().st_mode) != 0o700
+        or any(not (paths.extension_dir / name).is_file() for name in required_extension_files)
+    ):
+        raise LifecycleError("CONFIG_INVALID")
+    expected_config = (
+        f"globalThis.LEARNING_ANALYSIS_INSTALL_TOKEN = {json.dumps(token)};\n"
+    )
+    try:
+        config_path = paths.extension_dir / "install_config.js"
+        if (
+            stat.S_IMODE(config_path.stat().st_mode) != 0o600
+            or config_path.read_text(encoding="utf-8") != expected_config
+        ):
+            raise LifecycleError("CONFIG_INVALID")
+    except OSError as exc:
+        raise LifecycleError("CONFIG_INVALID") from exc
+    probe = status_probe or (lambda: status_agent(project_root, home=home))
+    status_payload = wait_until_ready(
+        probe,
+        timeout_seconds=wait_seconds,
+    )
+    return {
+        "status": "ok",
+        "label": LABEL,
+        "pid": status_payload["pid"],
+        "ready": True,
+        "checks": {
+            "agent": "ok",
+            "capture_token": "ok",
+            "extension": "ok",
+        },
+    }
+
+
+def upgrade_agent(project_root: Path, home: Path) -> Path:
+    subprocess.run(
+        ["/bin/launchctl", "bootout", _service_target()],
+        capture_output=True,
+        text=True,
+    )
+    wait_for_service_absent()
+    cleanup_installation(project_root, home)
+    return install_agent(project_root, home)
 
 
 def kill_once(project_root: Path) -> int:
@@ -303,14 +525,26 @@ def uninstall_agent(project_root: Path, home: Path) -> None:
         capture_output=True,
         text=True,
     )
+    wait_for_service_absent()
     cleanup_installation(project_root, home)
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Gate 1B disposable lifecycle spike")
+    parser = argparse.ArgumentParser(description="Learning Analysis local lifecycle")
     parser.add_argument(
-        "action", choices=("render", "run", "install", "status", "kill-once", "uninstall")
+        "action",
+        choices=(
+            "render",
+            "run",
+            "install",
+            "status",
+            "doctor",
+            "upgrade",
+            "kill-once",
+            "uninstall",
+        ),
     )
+    parser.add_argument("--wait", type=float, default=0)
     args = parser.parse_args(argv)
     root = _project_root()
     try:
@@ -322,7 +556,21 @@ def main(argv: list[str] | None = None) -> int:
             target = install_agent(root, Path.home())
             print(json.dumps({"status": "ok", "label": LABEL, "plist": str(target)}))
         elif args.action == "status":
-            print(json.dumps(status_agent(root), sort_keys=True))
+            result = wait_until_ready(
+                lambda: status_agent(root),
+                timeout_seconds=args.wait,
+            )
+            print(json.dumps(result, sort_keys=True))
+        elif args.action == "doctor":
+            print(
+                json.dumps(
+                    doctor_agent(root, Path.home(), wait_seconds=args.wait),
+                    sort_keys=True,
+                )
+            )
+        elif args.action == "upgrade":
+            target = upgrade_agent(root, Path.home())
+            print(json.dumps({"status": "ok", "label": LABEL, "plist": str(target)}))
         elif args.action == "kill-once":
             pid = kill_once(root)
             print(json.dumps({"status": "ok", "terminated_pid": pid}))

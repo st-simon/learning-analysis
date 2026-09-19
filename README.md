@@ -1,6 +1,10 @@
 # 学习和拆解 / learning-analysis
 
-Private read-only MCP bridge: ChatGPT supplies an HTTPS URL, local Jina Reader returns Markdown, and a content-addressed local copy is saved in `archive/` (ignored by Git). The bridge accepts no cookies, credentials, arbitrary headers, shell commands, or file paths. Default exact host allowlist: `example.com`, `www.iana.org`, `mp.weixin.qq.com`; public HTTPS only. Article text is untrusted source material.
+Private browser-assisted MCP bridge for public WeChat articles. ChatGPT calls
+`read_rendered_url`, the local MCP waits in memory, and one explicit Chrome
+extension click extracts the already-rendered article DOM. The formal route
+does not fetch the article again, persist its body, upload cookies, or fall back
+to Jina/Cloudflare. Article text is always untrusted source material.
 
 ## Domain allowlist policy
 
@@ -14,13 +18,30 @@ The host allowlist is a staged product-security boundary, not a complete list of
 
 Each addition must use the smallest necessary host scope, pass a focused verification, and be documented as a deliberate product decision. Do not expand the allowlist merely because a single URL failed or because a site is technically readable.
 
-Setup: `.venv/bin/python -m pip install -r requirements.txt`. Verify with `.venv/bin/python -m unittest -q` and `.venv/bin/python smoke_mcp.py`; use `--live` for example.com only. Start via `.venv/bin/python server.py` (stdio).
+Setup: `.venv/bin/python -m pip install -r requirements.txt`. Verify with
+`.venv/bin/python -m unittest -q`. Install and supervise the formal local route
+with `.venv/bin/python learning_analysis_lifecycle.py install`.
 
-The Platform tunnel is `learning-analysis`. `tunnel-client` requires a private runtime API key with Tunnels Read + Use, stored only in `.env`; this is separate from MCP OAuth. In ChatGPT choose Connection: Tunnel, Authentication: No Authentication. Keep the client running during discovery and calls.
+The Platform tunnel is `learning-analysis`. `tunnel-client` requires a private
+runtime API key with Tunnels Read + Use, stored only in `.env`; this is separate
+from MCP OAuth. The user LaunchAgent keeps the client and stdio MCP running.
 
-## Current route: browser-first L3 readiness
+## Current route: browser-first L3 implementation
 
-Gate 0 proved the browser-first route with 3/3 real articles and a real App/Web round trip through the Platform tunnel. Gate 1A-R then verified exact extension pairing, bounded early/late-click coordination, machine-checked tunnel readiness, and one successful App article call with one browser click. Gate 1B verified a disposable user-level LaunchAgent: initial and post-recovery App probes were routed by the expected instances, one controlled kill recovered to a new healthy PID, secrets and article data stayed out of plist/logs, and uninstall left zero runtime residue. The Reader direct-fetch probe remains inconclusive and the Cloudflare + Jina SaaS validation Worker remains frozen. Full implementation is not yet authorized; Gate 1B does not make the capture bridge persistent or prove natural login/restart startup. See the [project goal](docs/PROJECT_GOAL.md), [architecture](docs/ARCHITECTURE.md), [Gate 1B evidence](docs/gate1b-lifecycle-evidence.md), [Gate 1A-R evidence](docs/gate1a-race-fix-evidence.md), and [historical Cloudflare evidence](docs/cloudflare-validation.md).
+The approved [L3 full-implementation proposal](proposals/active/20260918-wechat-reader-l3-full-implementation.md) is verified. F0-F6 passed: in-process capture runtime, formal LaunchAgent, private extension/token, bounded doctor, App/Web transport, two current articles, natural login recovery in about 13.4 seconds, token-rotating upgrade, zero-residue uninstall, and final reinstall. The Reader direct-fetch probe remains inconclusive and the Cloudflare + Jina SaaS validation Worker remains frozen. See the [implementation evidence](docs/l3-full-implementation-evidence.md), [project goal](docs/PROJECT_GOAL.md), and [architecture](docs/ARCHITECTURE.md).
+
+Formal local lifecycle commands:
+
+```text
+.venv/bin/python learning_analysis_lifecycle.py status --wait 45
+.venv/bin/python learning_analysis_lifecycle.py doctor --wait 45
+.venv/bin/python learning_analysis_lifecycle.py upgrade
+.venv/bin/python learning_analysis_lifecycle.py uninstall
+```
+
+The generated unpacked extension directory is
+`runtime/learning-analysis/extension`. It is private runtime state and must not
+be committed or shared.
 
 The following Python prototype belongs to the earlier self-hosted route. Its tests remain useful as a contract baseline, not as proof that a Workers adapter exists or has passed validation.
 
